@@ -82,11 +82,13 @@ export class BaseEntity {
   }
 
   async delete(id) {
-    const { error } = await this.client
+    const { data, error } = await this.client
       .from(this.tableName)
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select();
     if (error) throw new Error(`[${this.tableName}] delete() failed: ${error.message}`);
+    if (!data || data.length === 0) throw new Error(`[${this.tableName}] delete() failed: no rows deleted (check RLS policies)`);
     return true;
   }
 }

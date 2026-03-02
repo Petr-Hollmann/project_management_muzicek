@@ -149,9 +149,13 @@ export default function VehicleForm({ vehicle, assignments, projects, isDetailVi
     notes: ""
   });
 
+  const dateFields = ["stk_expiry", "insurance_expiry", "highway_sticker_expiry", "last_service_date"];
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    const sanitized = { ...formData };
+    dateFields.forEach(f => { if (!sanitized[f]) sanitized[f] = null; });
+    onSubmit(sanitized);
   };
 
   const handleChange = (field, value) => {

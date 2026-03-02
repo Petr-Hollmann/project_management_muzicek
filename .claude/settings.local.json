@@ -6,7 +6,14 @@
       "Bash(npm run build:*)",
       "Bash(git init:*)",
       "Bash(git remote add:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(supabase --version:*)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(curl:*)",
+      "WebFetch(domain:developers.brevo.com)",
+      "WebFetch(domain:supabase.com)"
     ]
   }
 }
