@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { supabase } from '@/lib/supabase-client';
 import { User } from '@/entities/User';
 import { Worker } from '@/entities/Worker';
 import { Assignment } from '@/entities/Assignment';
@@ -14,7 +15,6 @@ import { format, isWithinInterval, isFuture, startOfMonth, endOfMonth, isBefore,
 import { cs } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from "@/components/ui/use-toast";
-import { Toaster } from "@/components/ui/toaster";
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
@@ -38,19 +38,37 @@ export default function InstallerDashboard() {
   const [selectedProject, setSelectedProject] = useState(null);
   const { toast } = useToast();
 
+  const logError = async (context, err, userId, workerId) => {
+    try {
+      await supabase.from('app_error_log').insert({
+        user_id: userId || null,
+        worker_id: workerId || null,
+        context,
+        error_msg: err?.message || String(err),
+        user_agent: navigator.userAgent,
+      });
+    } catch (_) {
+      // Logování selhalo — nevadí, neblokujeme UI
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
+      let currentUser = null;
+      let effectiveWorkerId = null;
       try {
-        const currentUser = await User.me();
-        
-        let effectiveWorkerId = currentUser.worker_profile_id;
+        currentUser = await User.me();
+
+        effectiveWorkerId = currentUser.worker_profile_id;
         const impersonatedId = localStorage.getItem('impersonated_worker_id');
         if (currentUser.app_role === 'admin' && impersonatedId) {
             effectiveWorkerId = impersonatedId;
         }
 
         if (!effectiveWorkerId) {
+          const msg = "Uživatelský účet není propojen s profilem montážníka.";
+          await logError('missing_worker_profile', new Error(msg), currentUser?.id, null);
           setError("Váš uživatelský účet není propojen s žádným profilem montážníka. Obraťte se na administrátora.");
           setIsLoading(false);
           return;
@@ -65,7 +83,7 @@ export default function InstallerDashboard() {
           Vehicle.list(),
           Certificate.filter({ worker_id: effectiveWorkerId })
         ]);
-        
+
         const projectsById = allProjects.reduce((acc, p) => ({ ...acc, [p.id]: p }), {});
 
         setWorker(workerData);
@@ -88,7 +106,8 @@ export default function InstallerDashboard() {
         setExpiringCertificates(expiring);
       } catch (err) {
         console.error("Error fetching installer data:", err);
-        setError("Nepodařilo se načíst data. Zkuste to prosím znovu.");
+        await logError('installer_dashboard_load', err, currentUser?.id, effectiveWorkerId);
+        setError(`Nepodařilo se načíst data. Chyba: ${err?.message || 'Neznámá chyba'}. Zkuste stránku obnovit.`);
       }
       setIsLoading(false);
     };
@@ -369,12 +388,15 @@ export default function InstallerDashboard() {
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-600">
-              <AlertTriangle className="w-5 h-5"/> 
+              <AlertTriangle className="w-5 h-5"/>
               Chyba profilu
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <p className="text-slate-700">{error}</p>
+            <Button onClick={() => window.location.reload()} className="w-full">
+              Obnovit stránku
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -383,7 +405,6 @@ export default function InstallerDashboard() {
 
   return (
     <div className="p-4 md:p-8 bg-slate-50 min-h-screen">
-      <Toaster />
       <div className="max-w-6xl mx-auto">
         <header className="mb-6 md:mb-8">
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">
