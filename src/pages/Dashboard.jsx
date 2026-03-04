@@ -1,5 +1,7 @@
 
 import React, { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase-client";
+import { User } from "@/entities/User";
 import { Project } from "@/entities/Project";
 import { Worker } from "@/entities/Worker";
 import { Vehicle } from "@/entities/Vehicle";
@@ -74,13 +76,28 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
+  const logAccess = async ({ context, status, err, userId }) => {
+    try {
+      await supabase.from('app_error_log').insert({
+        user_id: userId || null,
+        context,
+        status,
+        error_msg: err ? (err?.message || String(err)) : null,
+        user_agent: navigator.userAgent,
+      });
+    } catch (_) {}
+  };
+
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
     setIsLoading(true);
+    let currentUser = null;
     try {
+      currentUser = await User.me();
+
       const [projectsData, workersData, vehiclesData, assignmentsData] = await Promise.all([
         Project.list("-created_date"),
         Worker.list("-created_date"),
@@ -118,8 +135,11 @@ export default function Dashboard() {
       setWorkers(workersData);
       setVehicles(vehiclesData);
       setAssignments(assignmentsData);
+
+      await logAccess({ context: 'admin_dashboard_load', status: 'success', userId: currentUser?.id });
     } catch (error) {
       console.error("Error loading data:", error);
+      await logAccess({ context: 'admin_dashboard_load', status: 'error', err: error, userId: currentUser?.id });
     }
     setIsLoading(false);
   };
