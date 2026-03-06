@@ -49,6 +49,7 @@ export default function Tasks() {
         ]);
         setTasks(tasksData);
         setProjects(projectsData);
+        setUsers([user]); // installer can only assign to themselves
       }
     } catch (error) {
       console.error('Error loading tasks:', error);
@@ -160,7 +161,7 @@ export default function Tasks() {
               onComplete={handleComplete}
               onDelete={handleDelete}
               isLoading={isLoading}
-              isAdmin={isAdmin}
+              isAdmin={true}
               showCompletedBy={true}
             />
           </CardContent>
