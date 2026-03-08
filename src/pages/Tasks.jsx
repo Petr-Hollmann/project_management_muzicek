@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Task } from '@/entities/Task';
 import { Project } from '@/entities/Project';
 import { User } from '@/entities/User';
@@ -6,8 +6,10 @@ import { Assignment } from '@/entities/Assignment';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CheckSquare, Plus, Check, AlertTriangle, Clock, Calendar, Inbox, CheckCircle2 } from 'lucide-react';
+import { CheckSquare, Plus, Check, AlertTriangle, Clock, Calendar, Inbox, CheckCircle2, Search, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import TaskForm from '@/components/tasks/TaskForm';
@@ -218,6 +220,15 @@ export default function Tasks() {
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, task: null });
   const { toast } = useToast();
 
+  // Filters
+  const [search, setSearch] = useState('');
+  const [filterProject, setFilterProject] = useState('all');
+  const [filterAssignee, setFilterAssignee] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+  const [filterDueDateFrom, setFilterDueDateFrom] = useState('');
+  const [filterDueDateTo, setFilterDueDateTo] = useState('');
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -259,6 +270,43 @@ export default function Tasks() {
   const usersById = users.reduce((acc, u) => ({ ...acc, [u.id]: u }), {});
   const projectsById = projects.reduce((acc, p) => ({ ...acc, [p.id]: p }), {});
   const isAdmin = currentUser?.app_role === 'admin';
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+      if (search) {
+        const q = search.toLowerCase();
+        const title = (task.title || '').toLowerCase();
+        const desc = (task.description || '').toLowerCase();
+        if (!title.includes(q) && !desc.includes(q)) return false;
+      }
+      if (filterProject !== 'all') {
+        if (filterProject === '__none__') { if (task.project_id) return false; }
+        else if (task.project_id !== filterProject) return false;
+      }
+      if (filterAssignee !== 'all') {
+        if (filterAssignee === '__none__') { if (task.assigned_to_user_id) return false; }
+        else if (task.assigned_to_user_id !== filterAssignee) return false;
+      }
+      if (filterStatus !== 'all' && task.status !== filterStatus) return false;
+      if (filterPriority !== 'all' && task.priority !== filterPriority) return false;
+      if (filterDueDateFrom && task.due_date && task.due_date < filterDueDateFrom) return false;
+      if (filterDueDateTo && task.due_date && task.due_date > filterDueDateTo) return false;
+      return true;
+    });
+  }, [tasks, search, filterProject, filterAssignee, filterStatus, filterPriority, filterDueDateFrom, filterDueDateTo]);
+
+  const hasActiveFilters = search || filterProject !== 'all' || filterAssignee !== 'all' ||
+    filterStatus !== 'all' || filterPriority !== 'all' || filterDueDateFrom || filterDueDateTo;
+
+  const resetFilters = () => {
+    setSearch('');
+    setFilterProject('all');
+    setFilterAssignee('all');
+    setFilterStatus('all');
+    setFilterPriority('all');
+    setFilterDueDateFrom('');
+    setFilterDueDateTo('');
+  };
 
   const handleSave = async (data) => {
     try {
@@ -311,7 +359,7 @@ export default function Tasks() {
   return (
     <div className="p-4 md:p-8 bg-slate-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3">
               <CheckSquare className="w-8 h-8 text-blue-600" />
@@ -329,15 +377,107 @@ export default function Tasks() {
           )}
         </div>
 
+        {/* Filter bar */}
+        <Card className="mb-6">
+          <div className="p-4 space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="Hledat podle názvu nebo popisu..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger><SelectValue placeholder="Stav" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Všechny stavy</SelectItem>
+                  <SelectItem value="pending">Čeká</SelectItem>
+                  <SelectItem value="in_progress">V řešení</SelectItem>
+                  <SelectItem value="completed">Hotovo</SelectItem>
+                  <SelectItem value="cancelled">Zrušeno</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <SelectTrigger><SelectValue placeholder="Priorita" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Všechny priority</SelectItem>
+                  <SelectItem value="high">Vysoká</SelectItem>
+                  <SelectItem value="medium">Střední</SelectItem>
+                  <SelectItem value="low">Nízká</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={filterProject} onValueChange={setFilterProject}>
+                <SelectTrigger><SelectValue placeholder="Projekt" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Všechny projekty</SelectItem>
+                  <SelectItem value="__none__">Bez projektu</SelectItem>
+                  {projects.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {isAdmin && (
+                <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+                  <SelectTrigger><SelectValue placeholder="Přiřazeno" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Všichni</SelectItem>
+                    <SelectItem value="__none__">Nepřiřazeno</SelectItem>
+                    {users.map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.full_name || u.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              <div className="flex gap-2 col-span-2 sm:col-span-1">
+                <Input
+                  type="date"
+                  value={filterDueDateFrom}
+                  onChange={e => setFilterDueDateFrom(e.target.value)}
+                  title="Termín od"
+                  className="text-sm"
+                />
+                <Input
+                  type="date"
+                  value={filterDueDateTo}
+                  onChange={e => setFilterDueDateTo(e.target.value)}
+                  title="Termín do"
+                  className="text-sm"
+                />
+              </div>
+            </div>
+
+            {hasActiveFilters && (
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-sm text-slate-500">
+                  Zobrazeno {filteredTasks.length} z {tasks.length} úkolů
+                </span>
+                <Button variant="ghost" size="sm" onClick={resetFilters} className="text-slate-500 h-7 px-2">
+                  <X className="w-3 h-3 mr-1" />
+                  Zrušit filtry
+                </Button>
+              </div>
+            )}
+          </div>
+        </Card>
+
         {isAdmin ? (
           /* Admin: full table with edit/delete */
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Všechny úkoly ({tasks.length})</CardTitle>
+              <CardTitle className="text-lg">
+                Všechny úkoly ({filteredTasks.length}{hasActiveFilters ? ` / ${tasks.length}` : ''})
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <TaskList
-                tasks={tasks}
+                tasks={filteredTasks}
                 usersById={usersById}
                 projectsById={projectsById}
                 onEdit={handleEdit}
@@ -352,7 +492,7 @@ export default function Tasks() {
         ) : (
           /* Installer: grouped card view, read-only + complete only */
           <InstallerTaskView
-            tasks={tasks}
+            tasks={filteredTasks}
             projectsById={projectsById}
             onComplete={handleComplete}
             isLoading={isLoading}
