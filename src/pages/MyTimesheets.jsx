@@ -29,7 +29,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import { supabase } from "@/lib/supabase-client";
 
 const logAccess = async ({ context, status, err = null, userId = null, workerId = null }) => {
@@ -58,9 +58,9 @@ export default function MyTimesheets() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
 
-  // NOVÉ: Filtry
-  const [filterProjectId, setFilterProjectId] = useState(null);
-  const [filterStatus, setFilterStatus] = useState(null);
+  // Filtry (arrays = multi-select)
+  const [filterProjectId, setFilterProjectId] = useState([]);
+  const [filterStatus, setFilterStatus] = useState([]);
 
   // Stavy pro dialogy
   const [deleteDialog, setDeleteDialog] = useState({ open: false, entryId: null });
@@ -112,25 +112,25 @@ export default function MyTimesheets() {
     return Object.values(projectMap).sort((a, b) => b.totalHours - a.totalHours);
   }, [entries, projects]);
 
-  // NOVÉ: Filtrované entries
+  // Filtrované entries
   const filteredEntries = useMemo(() => {
     let filtered = [...entries];
-    
-    if (filterProjectId) {
-      filtered = filtered.filter(e => e.project_id === filterProjectId);
+
+    if (filterProjectId.length > 0) {
+      filtered = filtered.filter(e => filterProjectId.includes(e.project_id));
     }
-    
-    if (filterStatus) {
-      filtered = filtered.filter(e => e.status === filterStatus);
+
+    if (filterStatus.length > 0) {
+      filtered = filtered.filter(e => filterStatus.includes(e.status));
     }
-    
+
     return filtered;
   }, [entries, filterProjectId, filterStatus]);
 
   // Handler pro kliknutí na stav v projektu
   const handleProjectStatusClick = (projectId, status) => {
-    setFilterProjectId(projectId);
-    setFilterStatus(status);
+    setFilterProjectId([projectId]);
+    setFilterStatus([status]);
     // Scroll to the list
     setTimeout(() => {
       document.getElementById('timesheets-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -139,8 +139,8 @@ export default function MyTimesheets() {
 
   // Reset filtrů
   const handleResetFilters = () => {
-    setFilterProjectId(null);
-    setFilterStatus(null);
+    setFilterProjectId([]);
+    setFilterStatus([]);
   };
 
   // Mapování stavů pro zobrazení v UI
@@ -491,39 +491,31 @@ export default function MyTimesheets() {
             <div className="bg-white p-4 rounded-lg shadow-sm mb-6" id="timesheets-list">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <label htmlFor="project-filter" className="text-sm font-medium text-slate-700">Projekt</label>
-                  <Select value={filterProjectId || "all"} onValueChange={(value) => setFilterProjectId(value === "all" ? null : value)}>
-                    <SelectTrigger id="project-filter">
-                      <SelectValue placeholder="Všechny projekty" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Všechny projekty</SelectItem>
-                      {projectHoursStats.map((project) => (
-                        <SelectItem key={project.projectId} value={project.projectId}>
-                          {project.projectName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <label className="text-sm font-medium text-slate-700">Projekt</label>
+                  <MultiSelect
+                    options={projectHoursStats.map(p => ({ value: p.projectId, label: p.projectName }))}
+                    value={filterProjectId}
+                    onChange={setFilterProjectId}
+                    placeholder="Všechny projekty"
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="status-filter" className="text-sm font-medium text-slate-700">Stav</label>
-                  <Select value={filterStatus || "all"} onValueChange={(value) => setFilterStatus(value === "all" ? null : value)}>
-                    <SelectTrigger id="status-filter">
-                      <SelectValue placeholder="Všechny stavy" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Všechny stavy</SelectItem>
-                      <SelectItem value="draft">Koncepty</SelectItem>
-                      <SelectItem value="submitted">Odesláno</SelectItem>
-                      <SelectItem value="approved">Schváleno</SelectItem>
-                      <SelectItem value="rejected">Zamítnuto</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <label className="text-sm font-medium text-slate-700">Stav</label>
+                  <MultiSelect
+                    options={[
+                      { value: 'draft', label: 'Koncept' },
+                      { value: 'submitted', label: 'Odesláno' },
+                      { value: 'approved', label: 'Schváleno' },
+                      { value: 'rejected', label: 'Zamítnuto' },
+                    ]}
+                    value={filterStatus}
+                    onChange={setFilterStatus}
+                    placeholder="Všechny stavy"
+                  />
                 </div>
 
-                {(filterProjectId || filterStatus) && (
+                {(filterProjectId.length > 0 || filterStatus.length > 0) && (
                   <div className="flex items-end">
                     <Button variant="ghost" onClick={handleResetFilters} className="w-full">
                       Zrušit filtry

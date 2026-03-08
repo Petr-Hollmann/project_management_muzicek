@@ -8,11 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { CheckSquare, Plus, Check, AlertTriangle, Clock, Calendar, Inbox, CheckCircle2, Search, X, ChevronsUpDown } from 'lucide-react';
+import { MultiSelect } from '@/components/ui/MultiSelect';
+import { CheckSquare, Plus, Check, AlertTriangle, Clock, Calendar, Inbox, CheckCircle2, Search, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import TaskForm from '@/components/tasks/TaskForm';
@@ -20,41 +18,6 @@ import TaskList from '@/components/tasks/TaskList';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
 
-// Searchable combobox for filter dropdowns
-function FilterCombobox({ value, onChange, options, placeholder, allLabel }) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find(o => o.value === value);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button className="flex items-center justify-between w-full border rounded-md px-3 py-2 text-sm bg-white hover:bg-slate-50 text-left gap-2 min-w-0">
-          <span className="truncate text-slate-700">{selected ? selected.label : allLabel}</span>
-          <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Hledat..." />
-          <CommandList>
-            <CommandEmpty>Nic nenalezeno</CommandEmpty>
-            <CommandGroup>
-              <CommandItem value="__all__" onSelect={() => { onChange('all'); setOpen(false); }}>
-                <Check className={`mr-2 w-4 h-4 ${value === 'all' ? 'opacity-100' : 'opacity-0'}`} />
-                {allLabel}
-              </CommandItem>
-              {options.map(opt => (
-                <CommandItem key={opt.value} value={opt.label} onSelect={() => { onChange(opt.value); setOpen(false); }}>
-                  <Check className={`mr-2 w-4 h-4 ${value === opt.value ? 'opacity-100' : 'opacity-0'}`} />
-                  {opt.label}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 const PRIORITY_COLORS = {
   low: 'bg-slate-100 text-slate-600',
@@ -259,12 +222,12 @@ export default function Tasks() {
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, task: null });
   const { toast } = useToast();
 
-  // Filters
+  // Filters (arrays = multi-select)
   const [search, setSearch] = useState('');
-  const [filterProject, setFilterProject] = useState('all');
-  const [filterAssignee, setFilterAssignee] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [filterPriority, setFilterPriority] = useState('all');
+  const [filterProject, setFilterProject] = useState([]);
+  const [filterAssignee, setFilterAssignee] = useState([]);
+  const [filterStatus, setFilterStatus] = useState([]);
+  const [filterPriority, setFilterPriority] = useState([]);
   const [filterDueDateFrom, setFilterDueDateFrom] = useState('');
   const [filterDueDateTo, setFilterDueDateTo] = useState('');
 
@@ -321,31 +284,33 @@ export default function Tasks() {
         const assigneeName = (assigneeUser ? (assigneeUser.full_name || assigneeUser.email || '') : '').toLowerCase();
         if (!title.includes(q) && !desc.includes(q) && !projectName.includes(q) && !assigneeName.includes(q)) return false;
       }
-      if (filterProject !== 'all') {
-        if (filterProject === '__none__') { if (task.project_id) return false; }
-        else if (task.project_id !== filterProject) return false;
+      if (filterProject.length > 0) {
+        const hasNone = filterProject.includes('__none__');
+        const match = (hasNone && !task.project_id) || (task.project_id && filterProject.includes(task.project_id));
+        if (!match) return false;
       }
-      if (filterAssignee !== 'all') {
-        if (filterAssignee === '__none__') { if (task.assigned_to_user_id) return false; }
-        else if (task.assigned_to_user_id !== filterAssignee) return false;
+      if (filterAssignee.length > 0) {
+        const hasNone = filterAssignee.includes('__none__');
+        const match = (hasNone && !task.assigned_to_user_id) || (task.assigned_to_user_id && filterAssignee.includes(task.assigned_to_user_id));
+        if (!match) return false;
       }
-      if (filterStatus !== 'all' && task.status !== filterStatus) return false;
-      if (filterPriority !== 'all' && task.priority !== filterPriority) return false;
+      if (filterStatus.length > 0 && !filterStatus.includes(task.status)) return false;
+      if (filterPriority.length > 0 && !filterPriority.includes(task.priority)) return false;
       if (filterDueDateFrom && task.due_date && task.due_date < filterDueDateFrom) return false;
       if (filterDueDateTo && task.due_date && task.due_date > filterDueDateTo) return false;
       return true;
     });
   }, [tasks, search, filterProject, filterAssignee, filterStatus, filterPriority, filterDueDateFrom, filterDueDateTo]);
 
-  const hasActiveFilters = search || filterProject !== 'all' || filterAssignee !== 'all' ||
-    filterStatus !== 'all' || filterPriority !== 'all' || filterDueDateFrom || filterDueDateTo;
+  const hasActiveFilters = search || filterProject.length > 0 || filterAssignee.length > 0 ||
+    filterStatus.length > 0 || filterPriority.length > 0 || filterDueDateFrom || filterDueDateTo;
 
   const resetFilters = () => {
     setSearch('');
-    setFilterProject('all');
-    setFilterAssignee('all');
-    setFilterStatus('all');
-    setFilterPriority('all');
+    setFilterProject([]);
+    setFilterAssignee([]);
+    setFilterStatus([]);
+    setFilterPriority([]);
     setFilterDueDateFrom('');
     setFilterDueDateTo('');
   };
@@ -434,55 +399,57 @@ export default function Tasks() {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">Stav</Label>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger><SelectValue placeholder="Stav" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Všechny stavy</SelectItem>
-                    <SelectItem value="pending">Čeká</SelectItem>
-                    <SelectItem value="in_progress">V řešení</SelectItem>
-                    <SelectItem value="completed">Hotovo</SelectItem>
-                    <SelectItem value="cancelled">Zrušeno</SelectItem>
-                  </SelectContent>
-                </Select>
+                <MultiSelect
+                  options={[
+                    { value: 'pending', label: 'Čeká' },
+                    { value: 'in_progress', label: 'V řešení' },
+                    { value: 'completed', label: 'Hotovo' },
+                    { value: 'cancelled', label: 'Zrušeno' },
+                  ]}
+                  value={filterStatus}
+                  onChange={setFilterStatus}
+                  placeholder="Všechny stavy"
+                />
               </div>
 
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">Priorita</Label>
-                <Select value={filterPriority} onValueChange={setFilterPriority}>
-                  <SelectTrigger><SelectValue placeholder="Priorita" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Všechny priority</SelectItem>
-                    <SelectItem value="high">Vysoká</SelectItem>
-                    <SelectItem value="medium">Střední</SelectItem>
-                    <SelectItem value="low">Nízká</SelectItem>
-                  </SelectContent>
-                </Select>
+                <MultiSelect
+                  options={[
+                    { value: 'high', label: 'Vysoká' },
+                    { value: 'medium', label: 'Střední' },
+                    { value: 'low', label: 'Nízká' },
+                  ]}
+                  value={filterPriority}
+                  onChange={setFilterPriority}
+                  placeholder="Všechny priority"
+                />
               </div>
 
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">Projekt</Label>
-                <FilterCombobox
-                  value={filterProject}
-                  onChange={setFilterProject}
+                <MultiSelect
                   options={[
                     { value: '__none__', label: 'Bez projektu' },
                     ...projects.map(p => ({ value: p.id, label: p.name })),
                   ]}
-                  allLabel="Všechny projekty"
+                  value={filterProject}
+                  onChange={setFilterProject}
+                  placeholder="Všechny projekty"
                 />
               </div>
 
               {isAdmin && (
                 <div>
                   <Label className="text-xs text-slate-500 mb-1 block">Přiřazeno</Label>
-                  <FilterCombobox
-                    value={filterAssignee}
-                    onChange={setFilterAssignee}
+                  <MultiSelect
                     options={[
                       { value: '__none__', label: 'Nepřiřazeno' },
                       ...users.map(u => ({ value: u.id, label: u.full_name || u.email })),
                     ]}
-                    allLabel="Všichni"
+                    value={filterAssignee}
+                    onChange={setFilterAssignee}
+                    placeholder="Všichni"
                   />
                 </div>
               )}

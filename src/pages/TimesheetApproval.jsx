@@ -22,7 +22,6 @@ import {
   AlertTriangle,
   Car
 } from 'lucide-react';
-import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import StatsCard from '../components/dashboard/StatsCard';
 import {
@@ -43,13 +42,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/MultiSelect';
 import { format, parseISO, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
 import { cs } from 'date-fns/locale';
 
@@ -76,11 +69,11 @@ export default function TimesheetApproval() {
   const [selectedEntries, setSelectedEntries] = useState(new Set());
   const { toast } = useToast();
 
-  // Filters
+  // Filters (arrays = multi-select)
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState('submitted');
-  const [filterProject, setFilterProject] = useState('all');
-  const [filterWorker, setFilterWorker] = useState('all');
+  const [filterStatus, setFilterStatus] = useState(['submitted']);
+  const [filterProject, setFilterProject] = useState([]);
+  const [filterWorker, setFilterWorker] = useState([]);
 
   // Dialogs
   const [rejectDialog, setRejectDialog] = useState({ open: false, entries: [] });
@@ -159,18 +152,18 @@ export default function TimesheetApproval() {
     let filtered = [...entries];
 
     // Filter by status
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(e => e.status === filterStatus);
+    if (filterStatus.length > 0) {
+      filtered = filtered.filter(e => filterStatus.includes(e.status));
     }
 
     // Filter by project
-    if (filterProject !== 'all') {
-      filtered = filtered.filter(e => e.project_id === filterProject);
+    if (filterProject.length > 0) {
+      filtered = filtered.filter(e => filterProject.includes(e.project_id));
     }
 
     // Filter by worker
-    if (filterWorker !== 'all') {
-      filtered = filtered.filter(e => e.worker_id === filterWorker);
+    if (filterWorker.length > 0) {
+      filtered = filtered.filter(e => filterWorker.includes(e.worker_id));
     }
 
     // Search
@@ -189,6 +182,8 @@ export default function TimesheetApproval() {
 
     return filtered;
   }, [entries, filterStatus, filterProject, filterWorker, searchQuery, projects, workers]);
+
+
 
   // Handle selection
   const toggleSelection = (entryId) => {
@@ -347,7 +342,6 @@ export default function TimesheetApproval() {
 
   return (
     <div className="p-4 md:p-8 bg-slate-50 min-h-screen">
-      <Toaster />
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <header className="mb-6 md:mb-8">
@@ -368,7 +362,7 @@ export default function TimesheetApproval() {
             icon={Clock}
             color="blue"
             subtitle="Výkazů ke schválení"
-            onClick={() => setFilterStatus('submitted')}
+            onClick={() => setFilterStatus(['submitted'])}
           />
           <StatsCard
             title="Schváleno dnes"
@@ -390,7 +384,7 @@ export default function TimesheetApproval() {
             icon={XCircle}
             color="red"
             subtitle="Vyžaduje opravu"
-            onClick={() => setFilterStatus('rejected')}
+            onClick={() => setFilterStatus(['rejected'])}
           />
         </div>
 
@@ -447,54 +441,39 @@ export default function TimesheetApproval() {
               {/* Status filter */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">Stav</label>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Všechny stavy</SelectItem>
-                    <SelectItem value="submitted">Čeká na schválení</SelectItem>
-                    <SelectItem value="approved">Schváleno</SelectItem>
-                    <SelectItem value="rejected">Zamítnuto</SelectItem>
-                    <SelectItem value="draft">Koncept</SelectItem>
-                  </SelectContent>
-                </Select>
+                <MultiSelect
+                  options={[
+                    { value: 'submitted', label: 'Čeká na schválení' },
+                    { value: 'approved', label: 'Schváleno' },
+                    { value: 'rejected', label: 'Zamítnuto' },
+                    { value: 'draft', label: 'Koncept' },
+                  ]}
+                  value={filterStatus}
+                  onChange={setFilterStatus}
+                  placeholder="Všechny stavy"
+                />
               </div>
 
               {/* Project filter */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">Projekt</label>
-                <Select value={filterProject} onValueChange={setFilterProject}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Všechny projekty</SelectItem>
-                    {uniqueProjects.map(project => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelect
+                  options={uniqueProjects.map(p => ({ value: p.id, label: p.name }))}
+                  value={filterProject}
+                  onChange={setFilterProject}
+                  placeholder="Všechny projekty"
+                />
               </div>
 
               {/* Worker filter */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">Montážník</label>
-                <Select value={filterWorker} onValueChange={setFilterWorker}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Všichni montážníci</SelectItem>
-                    {uniqueWorkers.map(worker => (
-                      <SelectItem key={worker.id} value={worker.id}>
-                        {worker.first_name} {worker.last_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelect
+                  options={uniqueWorkers.map(w => ({ value: w.id, label: `${w.first_name} ${w.last_name}` }))}
+                  value={filterWorker}
+                  onChange={setFilterWorker}
+                  placeholder="Všichni montážníci"
+                />
               </div>
             </div>
 
