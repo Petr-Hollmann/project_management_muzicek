@@ -195,8 +195,8 @@ export default function AssignmentForm({ resourceType, project, allWorkers, allV
     });
   }, [assignment.start_date, assignment.end_date, allAssignments, existingAssignment]);
 
-  const allWorkersWithAvailability = useMemo(() => 
-    getResourceAvailability(allWorkers || [], 'worker_id'), 
+  const allWorkersWithAvailability = useMemo(() =>
+    getResourceAvailability((allWorkers || []).filter(w => w.availability !== 'terminated'), 'worker_id'),
     [allWorkers, getResourceAvailability]
   );
   

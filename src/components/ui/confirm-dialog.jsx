@@ -22,7 +22,7 @@ export function ConfirmDialog({
 }) {
   const handleConfirm = () => {
     onConfirm();
-    onOpenChange(false);
+    // Note: AlertDialogAction already calls onOpenChange(false) automatically
   };
 
   return (

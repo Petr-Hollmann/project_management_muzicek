@@ -185,7 +185,7 @@ const ProjectCard = ({ project, assignments, workers, onEdit, onDelete, isAdmin 
         </div>
          <div className="flex justify-between items-center text-sm gap-2">
           <span className="text-slate-500 flex-shrink-0">Rozpočet:</span>
-          <span className="font-semibold whitespace-nowrap">{project.budget ? `${project.budget.toLocaleString('cs-CZ')} Kč` : '-'}</span>
+          <span className="font-semibold whitespace-nowrap">{project.budget ? `${project.budget.toLocaleString('cs-CZ')} ${project.budget_currency || 'CZK'}` : '-'}</span>
         </div>
       </CardContent>
       {isAdmin && (
@@ -276,7 +276,7 @@ export default function ProjectsTable({ projects, assignments, workers, onEdit, 
                   <TableCell>{project.start_date ? format(new Date(project.start_date), "d. M. yyyy", { locale: cs }) : '-'}</TableCell>
                   <TableCell>{project.end_date ? format(new Date(project.end_date), "d. M. yyyy", { locale: cs }) : '-'}</TableCell>
                   <TableCell>
-                    {project.budget ? `${project.budget.toLocaleString('cs-CZ')} Kč` : '-'}
+                    {project.budget ? `${project.budget.toLocaleString('cs-CZ')} ${project.budget_currency || 'CZK'}` : '-'}
                   </TableCell>
                   {isAdmin && (
                     <TableCell className="text-right">

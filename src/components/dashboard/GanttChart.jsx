@@ -234,6 +234,7 @@ export default function GanttChart({
     { value: "available", label: "Dostupný" },
     { value: "on_vacation", label: "Dovolená" },
     { value: "sick", label: "Nemoc" },
+    { value: "terminated", label: "Ukončená spolupráce" },
   ], []);
 
   const workerSeniorityOptions = useMemo(() => [ 

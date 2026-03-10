@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { User } from "@/entities/User";
+import { GlobalRates } from "@/entities/GlobalRates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +16,7 @@ import CertificateManagement from "./CertificateManagement";
 import AssignmentHistory from "./AssignmentHistory";
 
 const seniorityOptions = ["junior", "medior", "senior", "specialista"];
-const availabilityOptions = ["available", "on_vacation", "sick"];
+const availabilityOptions = ["available", "on_vacation", "sick", "terminated"];
 const countryOptions = [
   "Česká republika", "Slovensko", "Polsko", "Německo", "Rakousko",
   "Ukrajina", "Maďarsko", "Rumunsko", "Itálie", "Francie", "Jiná země"
@@ -56,13 +57,18 @@ export default function WorkerForm({
   const certManagementRef = React.useRef();
   const { toast } = useToast();
 
-  // Load admin's default hourly rates
+  // Load default hourly rates from GlobalRates
   useEffect(() => {
-    User.me()
-      .then(user => setDefaultRates({
-        domestic: user.default_hourly_rates_domestic || {},
-        international: user.default_hourly_rates_international || {}
-      }))
+    GlobalRates.list()
+      .then(allRates => {
+        const rates = allRates.find(r => r.is_default) || allRates[0];
+        if (rates) {
+          setDefaultRates({
+            domestic: rates.hourly_rates_domestic || {},
+            international: rates.hourly_rates_international || {}
+          });
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -142,7 +148,7 @@ export default function WorkerForm({
     if (isDetailView) return;
     setFormData(prev => {
       const next = { ...prev, [field]: value };
-      if (field === 'seniority' && !worker && defaultRates) {
+      if (field === 'seniority' && defaultRates) {
         next.hourly_rate_domestic = defaultRates.domestic?.[value] || "";
         next.hourly_rate_international = defaultRates.international?.[value] || "";
       }
@@ -379,7 +385,7 @@ export default function WorkerForm({
                         <SelectContent>
                           {availabilityOptions.map(o => (
                             <SelectItem key={o} value={o}>
-                              {o === 'available' ? 'Dostupný' : o === 'on_vacation' ? 'Dovolená' : 'Nemoc'}
+                              {o === 'available' ? 'Dostupný' : o === 'on_vacation' ? 'Dovolená' : o === 'sick' ? 'Nemoc' : 'Ukončená spolupráce'}
                             </SelectItem>
                           ))}
                         </SelectContent>

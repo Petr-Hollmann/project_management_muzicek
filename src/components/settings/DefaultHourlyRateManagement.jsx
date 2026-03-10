@@ -3,6 +3,7 @@ import { GlobalRates } from '@/entities/GlobalRates';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { DollarSign, Save, Users, Car, RefreshCw } from 'lucide-react';
@@ -40,6 +41,7 @@ export default function DefaultHourlyRateManagement() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
+  const [overwriteExisting, setOverwriteExisting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -179,24 +181,27 @@ export default function DefaultHourlyRateManagement() {
   };
 
   const handleMigrateRates = async () => {
-    if (!confirm('Opravdu chcete propsat aktuální sazby ke všem montážníkům, kteří je ještě nemají nastavené?')) {
+    const confirmMsg = overwriteExisting
+      ? 'Opravdu chcete přepsat hodinové sazby u VŠECH montážníků? Stávající individuální sazby budou nahrazeny.'
+      : 'Opravdu chcete doplnit sazby montážníkům, kteří je ještě nemají nastavené?';
+    if (!confirm(confirmMsg)) {
       return;
     }
 
     setIsMigrating(true);
     try {
-      const response = await migrateWorkerRates({});
-      
-      if (response.data.success) {
+      const response = await migrateWorkerRates({ overwriteExisting });
+
+      if (response.success) {
         toast({
           title: "Úspěch",
-          description: response.data.message
+          description: response.message
         });
       } else {
         toast({
           variant: "destructive",
           title: "Chyba",
-          description: response.data.error || "Nepodařilo se aktualizovat sazby."
+          description: response.error || "Nepodařilo se aktualizovat sazby."
         });
       }
     } catch (error) {
@@ -310,10 +315,19 @@ export default function DefaultHourlyRateManagement() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h4 className="font-semibold text-blue-900 mb-2">Propsat sazby ke všem montážníkům</h4>
               <p className="text-sm text-blue-800 mb-3">
-                Aktualizuje hodinové sazby u všech montážníků podle jejich seniority. 
-                Přepíší se pouze sazby, které montážníci ještě nemají nastavené.
+                Doplní nebo přepíše hodinové sazby montážníkům podle jejich seniority.
               </p>
-              <Button 
+              <div className="flex items-center gap-2 mb-3">
+                <Checkbox
+                  id="overwrite-existing"
+                  checked={overwriteExisting}
+                  onCheckedChange={(checked) => setOverwriteExisting(!!checked)}
+                />
+                <Label htmlFor="overwrite-existing" className="text-sm text-blue-900 cursor-pointer">
+                  Přepsat i stávající sazby (jinak jen doplní chybějící)
+                </Label>
+              </div>
+              <Button
                 onClick={handleMigrateRates} 
                 disabled={isMigrating}
                 variant="outline"

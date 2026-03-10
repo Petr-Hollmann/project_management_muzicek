@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Plus, Car, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/components/ui/use-toast";
 import { usePersistentState } from "@/components/hooks";
 import { Label } from "@/components/ui/label";
@@ -250,7 +249,7 @@ export default function VehiclesPage() {
   }, [vehicles, searchTerm, filters, sortConfig, checkExpiring]);
 
 
-  const isAdmin = !!user;
+  const isAdmin = user?.app_role === 'admin';
 
   const resetFilters = () => {
     setSearchTerm("");
@@ -266,7 +265,6 @@ export default function VehiclesPage() {
 
   return (
     <div className="p-4 md:p-8 bg-slate-50 min-h-screen">
-      <Toaster />
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>

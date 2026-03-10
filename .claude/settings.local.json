@@ -13,7 +13,10 @@
       "Bash(echo \"EXIT:$?\")",
       "Bash(curl:*)",
       "WebFetch(domain:developers.brevo.com)",
-      "WebFetch(domain:supabase.com)"
+      "WebFetch(domain:supabase.com)",
+      "Bash(test -f \"c:/Work/project_management/project-managemenent-034f5142/src/components/ui/progress.jsx\")",
+      "Bash(npx supabase functions deploy calendar-feed)",
+      "Bash(npx supabase functions deploy calendar-feed --no-verify-jwt)"
     ]
   }
 }

@@ -16,7 +16,6 @@ import Vehicles from './pages/Vehicles';
 import WorkerDetail from './pages/WorkerDetail';
 import Workers from './pages/Workers';
 import Tasks from './pages/Tasks';
-import AppErrorLogs from './pages/AppErrorLogs';
 import __Layout from './Layout.jsx';
 
 
@@ -39,7 +38,6 @@ export const PAGES = {
     "WorkerDetail": WorkerDetail,
     "Workers": Workers,
     "Tasks": Tasks,
-    "AppErrorLogs": AppErrorLogs,
 }
 
 export const pagesConfig = {

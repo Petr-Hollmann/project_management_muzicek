@@ -19,13 +19,15 @@ const seniorityLabels = {
 const availabilityLabels = {
   available: "Dostupný",
   on_vacation: "Dovolená",
-  sick: "Nemoc"
+  sick: "Nemoc",
+  terminated: "Ukončená spolupráce"
 };
 
 const availabilityColors = {
   available: "bg-green-100 text-green-800",
   on_vacation: "bg-yellow-100 text-yellow-800",
-  sick: "bg-red-100 text-red-800"
+  sick: "bg-red-100 text-red-800",
+  terminated: "bg-slate-200 text-slate-600"
 };
 
 const countryFlags = {

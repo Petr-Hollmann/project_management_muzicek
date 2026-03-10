@@ -278,7 +278,7 @@ export default function VehicleDetail() {
     in_service: "bg-yellow-100 text-yellow-800"
   };
 
-  const isAdmin = !!user;
+  const isAdmin = user?.app_role === 'admin';
 
   if (isLoading) {
     return (
