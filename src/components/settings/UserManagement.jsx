@@ -16,7 +16,6 @@ import { isSuperAdmin } from "@/utils/roles";
 const roleOptions = [
   { value: 'admin',      label: 'Administrátor', icon: Shield },
   { value: 'supervisor', label: 'Supervisor',     icon: ShieldCheck },
-  { value: 'pending',    label: 'Čekající',       icon: UserX },
 ];
 
 const RoleBadge = ({ role }) => {
@@ -46,7 +45,6 @@ const generatePassword = () => {
 
 export default function UserManagement({ users, workers, currentUser, onUserUpdate }) {
   const [updating, setUpdating] = useState(null);
-  const [editingWorkerAssignment, setEditingWorkerAssignment] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [editFormData, setEditFormData] = useState({ full_name: '', email: '', country_code: '+420', phone_number: '' });
   const [deletingUser, setDeletingUser] = useState(null);
@@ -223,8 +221,8 @@ export default function UserManagement({ users, workers, currentUser, onUserUpda
     setAddFormData({ full_name: '', email: '', country_code: '+420', phone_number: '', app_role: 'supervisor' });
   };
 
-  // Show only privileged (admin/supervisor) and pending users — installers are managed in Workers page
-  const displayedUsers = users.filter(u => u.app_role !== 'installer');
+  // Show only privileged (admin/supervisor) users — installers in Workers page, pending in Approval tab
+  const displayedUsers = users.filter(u => u.app_role !== 'installer' && u.app_role !== 'pending');
 
   // Available role options based on viewer's own role
   const availableRoleOptions = roleOptions.filter(o => {

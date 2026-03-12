@@ -126,7 +126,7 @@ export default function Login() {
       password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: { phone: phone ? normalizePhone(phone) : null },
+        data: { full_name: fullName, phone: phone ? normalizePhone(phone) : null },
       },
     });
     if (signUpError) {
@@ -171,10 +171,12 @@ export default function Login() {
     }
 
     // 4. Upsert profilu v tabulce users
+    const normalizedPhone = phone ? normalizePhone(phone) : null;
     await supabase.from('users').upsert({
       id: userId,
       email,
       full_name: fullName,
+      phone: normalizedPhone || null,
       app_role: workerProfileId ? 'installer' : 'pending',
       worker_profile_id: workerProfileId,
     });

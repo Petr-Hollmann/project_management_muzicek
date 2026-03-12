@@ -3,10 +3,11 @@ import { Worker } from '@/entities/Worker';
 import { User } from '@/entities/User';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-import { Users, Loader2, Building2, FileText, DollarSign, UserCircle, KeyRound, ClipboardList, Wrench } from 'lucide-react';
-import { isPrivileged } from '@/utils/roles';
+import { Users, Loader2, Building2, FileText, DollarSign, UserCircle, KeyRound, ClipboardList, Wrench, UserCheck } from 'lucide-react';
+import { isSuperAdmin } from '@/utils/roles';
 import { useToast } from "@/components/ui/use-toast";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,6 +20,7 @@ import RoleTestingManagement from '../components/settings/RoleTestingManagement'
 import ChangePasswordDialog from '../components/ChangePasswordDialog';
 import TaskTemplateManagement from '../components/settings/TaskTemplateManagement';
 import InstallerUserManagement from '../components/settings/InstallerUserManagement';
+import PendingUserApproval from '../components/settings/PendingUserApproval';
 
 export default function SettingsPage() {
   const [workers, setWorkers] = useState([]);
@@ -56,7 +58,8 @@ export default function SettingsPage() {
     loadAllData();
   }, [loadAllData]); // Dependency: loadAllData
 
-  const isAdmin = isPrivileged(currentUser);
+  const isAdmin = isSuperAdmin(currentUser);
+  const pendingCount = users.filter(u => u.app_role === 'pending').length;
 
   return (
     <div className="p-4 bg-slate-50 min-h-screen">
@@ -70,8 +73,17 @@ export default function SettingsPage() {
         ) : isAdmin ? (
             <>
                 <ChangePasswordDialog open={showChangePassword} onOpenChange={setShowChangePassword} />
-                <Tabs defaultValue="users" className="space-y-4">
-                  <TabsList className="grid w-full grid-cols-8 gap-1">
+                <Tabs defaultValue="approval" className="space-y-4">
+                  <TabsList className="grid w-full grid-cols-9 gap-1">
+                    <TabsTrigger value="approval" className="text-xs md:text-sm relative">
+                      <UserCheck className="w-4 h-4 md:mr-2" />
+                      <span className="hidden sm:inline ml-1 md:ml-0">Schválení</span>
+                      {pendingCount > 0 && (
+                        <Badge className="ml-1 bg-red-500 text-white text-xs px-1.5 py-0 min-w-[1.25rem] h-5 hover:bg-red-500">
+                          {pendingCount}
+                        </Badge>
+                      )}
+                    </TabsTrigger>
                     <TabsTrigger value="users" className="text-xs md:text-sm">
                       <Users className="w-4 h-4 md:mr-2" />
                       <span className="hidden sm:inline ml-1 md:ml-0">Správci</span>
@@ -105,6 +117,26 @@ export default function SettingsPage() {
                       <span className="hidden sm:inline ml-1 md:ml-0">Heslo</span>
                     </TabsTrigger>
                   </TabsList>
+
+                  <TabsContent value="approval" className="mt-4">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                           <UserCheck className="w-5 h-5" />
+                           Schválení nových uživatelů
+                           {pendingCount > 0 && (
+                             <Badge className="bg-red-500 text-white text-xs">{pendingCount}</Badge>
+                           )}
+                        </CardTitle>
+                        <CardDescription className="text-sm">
+                            Schvalte registrované uživatele a přiřaďte jim roli v systému.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="px-0 sm:px-6">
+                         <PendingUserApproval users={users} workers={workers} currentUser={currentUser} onUserUpdate={loadAllData} />
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
 
                   <TabsContent value="users" className="mt-4">
                     <Card>

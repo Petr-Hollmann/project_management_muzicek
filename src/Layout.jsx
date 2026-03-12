@@ -37,6 +37,8 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/lib/supabase-client";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 const adminNavItems = [
@@ -97,6 +99,7 @@ export default function Layout({ children, currentPageName }) {
   const [user, setUser] = useState(null);
   const [impersonatedWorkerId, setImpersonatedWorkerId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingUserCount, setPendingUserCount] = useState(0);
 
   useEffect(() => {
     const impersonatedId = localStorage.getItem('impersonated_worker_id');
@@ -111,9 +114,17 @@ export default function Layout({ children, currentPageName }) {
           currentUser.worker_profile_id = impersonatedId;
           currentUser.app_role = 'installer';
         } else if (!currentUser.app_role) {
-          // Edge case: upsert selhal při registraci — nastavíme pending
-          await User.updateMyUserData({ app_role: 'pending' });
+          // Edge case: upsert selhal při registraci (RLS) — vytvoříme profil z auth metadata
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          const meta = authUser?.user_metadata || {};
+          await User.updateMyUserData({
+            app_role: 'pending',
+            full_name: meta.full_name || currentUser.email,
+            phone: meta.phone || null,
+          });
           currentUser.app_role = 'pending';
+          currentUser.full_name = meta.full_name || currentUser.email;
+          currentUser.phone = meta.phone || null;
         }
 
         const adminPages = ["Dashboard", "Projects", "Workers", "Vehicles", "Settings", "ProjectDetail", "WorkerDetail", "VehicleDetail", "Calendar", "Invoices", "TimesheetApproval"];
@@ -132,6 +143,15 @@ export default function Layout({ children, currentPageName }) {
         }
 
         setUser(currentUser);
+
+        // Fetch pending user count for admin badge
+        if (isSuperAdmin(currentUser)) {
+          const { count } = await supabase
+            .from('users')
+            .select('id', { count: 'exact', head: true })
+            .eq('app_role', 'pending');
+          setPendingUserCount(count || 0);
+        }
       } catch (error) {
         console.error("User not authenticated:", error);
       }
@@ -162,7 +182,7 @@ export default function Layout({ children, currentPageName }) {
     return [];
   };
 
-  const showSettings = !isLoading && isPrivileged(user);
+  const showSettings = !isLoading && isSuperAdmin(user);
 
   // Pending user - show simple header + waiting screen
   if (user && user.app_role === 'pending') {
@@ -305,6 +325,11 @@ export default function Layout({ children, currentPageName }) {
                       >
                         <item.icon className="w-4 h-4 flex-shrink-0" />
                         <span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
+                        {pendingUserCount > 0 && (
+                          <Badge className="ml-auto bg-red-500 text-white text-xs px-1.5 py-0 min-w-[1.25rem] h-5 hover:bg-red-500 group-data-[collapsible=icon]:hidden">
+                            {pendingUserCount}
+                          </Badge>
+                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
