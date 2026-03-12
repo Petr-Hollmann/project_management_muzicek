@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find c:/Work/project_management/project-managemenent-034f5142 -name *.sql -type f)"
+    ]
+  }
+}

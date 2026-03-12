@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { isPrivileged, isSuperAdmin, getRoleLabel } from "@/utils/roles";
 import {
   LayoutDashboard,
   FolderOpen,
@@ -106,7 +107,7 @@ export default function Layout({ children, currentPageName }) {
       try {
         let currentUser = await User.me();
 
-        if (impersonatedId && currentUser.app_role === 'admin') {
+        if (impersonatedId && isSuperAdmin(currentUser)) {
           currentUser.worker_profile_id = impersonatedId;
           currentUser.app_role = 'installer';
         } else if (!currentUser.app_role) {
@@ -118,7 +119,7 @@ export default function Layout({ children, currentPageName }) {
         const adminPages = ["Dashboard", "Projects", "Workers", "Vehicles", "Settings", "ProjectDetail", "WorkerDetail", "VehicleDetail", "Calendar", "Invoices", "TimesheetApproval"];
         const installerOnlyPages = ["InstallerDashboard", "InstallerProjectDetail", "MyTimesheets", "MyInvoices"];
 
-        if (currentUser.app_role === 'admin' && installerOnlyPages.includes(currentPageName)) {
+        if (isPrivileged(currentUser) && installerOnlyPages.includes(currentPageName)) {
           navigate(createPageUrl('Dashboard'), { replace: true });
           return;
         }
@@ -157,11 +158,11 @@ export default function Layout({ children, currentPageName }) {
   const getNavItems = () => {
     if (isLoading || !user) return [];
     if (user.app_role === 'installer') return installerNavItems;
-    if (user.app_role === 'admin') return adminNavItems;
+    if (isPrivileged(user)) return adminNavItems;
     return [];
   };
 
-  const showSettings = !isLoading && user?.app_role === 'admin';
+  const showSettings = !isLoading && isPrivileged(user);
 
   // Pending user - show simple header + waiting screen
   if (user && user.app_role === 'pending') {
@@ -337,7 +338,7 @@ export default function Layout({ children, currentPageName }) {
                         {user.full_name || user.email || 'Uživatel'}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {user.app_role === 'admin' ? 'Administrátor' : user.app_role === 'installer' ? 'Montážník' : 'Čekající'}
+                        {getRoleLabel(user.app_role)}
                       </p>
                     </div>
                   </div>

@@ -535,6 +535,8 @@ export default function ProjectCosts({
                     <SelectItem value="CZK">CZK</SelectItem>
                     <SelectItem value="EUR">EUR</SelectItem>
                     <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="CHF">CHF</SelectItem>
+                    <SelectItem value="GBP">GBP</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -274,15 +274,6 @@ export default function InvoicesPage() {
             </h1>
             <p className="text-slate-600">Přehled a schvalování objednávek od montážníků</p>
           </div>
-          <button
-            onClick={handleSyncAllCosts}
-            disabled={isSyncingCosts}
-            className="flex items-center gap-2 px-3 py-2 text-sm border rounded-lg bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Přenést přepravní a ostatní náklady ze všech schválených objednávek do nákladů zakázek"
-          >
-            <RefreshCw className={`w-4 h-4 ${isSyncingCosts ? 'animate-spin' : ''}`} />
-            {isSyncingCosts ? 'Synchronizuji...' : 'Synchronizovat náklady do zakázek'}
-          </button>
         </div>
 
         {/* Filtry */}

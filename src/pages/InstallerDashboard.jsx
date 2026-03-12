@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase-client';
 import { User } from '@/entities/User';
+import { isSuperAdmin } from '@/utils/roles';
 import { Worker } from '@/entities/Worker';
 import { Assignment } from '@/entities/Assignment';
 import { Task } from '@/entities/Task';
@@ -67,7 +68,7 @@ export default function InstallerDashboard() {
 
         effectiveWorkerId = currentUser.worker_profile_id;
         const impersonatedId = localStorage.getItem('impersonated_worker_id');
-        if (currentUser.app_role === 'admin' && impersonatedId) {
+        if (isSuperAdmin(currentUser) && impersonatedId) {
             effectiveWorkerId = impersonatedId;
         }
 

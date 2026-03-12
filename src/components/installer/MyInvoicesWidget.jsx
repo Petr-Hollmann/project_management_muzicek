@@ -5,6 +5,7 @@ import { Worker } from "@/entities/Worker";
 import { ClientCompanyProfile } from "@/entities/ClientCompanyProfile";
 import { ContractualTextTemplate } from "@/entities/ContractualTextTemplate";
 import { User } from "@/entities/User";
+import { isSuperAdmin } from "@/utils/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,7 +54,7 @@ export default function MyInvoicesWidget() {
       let workerId = user.worker_profile_id;
       
       // Pokud admin impersonuje, použij impersonated ID
-      if (impersonatedId && user.app_role === 'admin') {
+      if (impersonatedId && isSuperAdmin(user)) {
         workerId = impersonatedId;
       }
       

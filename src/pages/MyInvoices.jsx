@@ -7,6 +7,7 @@ import { TimesheetEntry } from "@/entities/TimesheetEntry";
 import { ClientCompanyProfile } from "@/entities/ClientCompanyProfile";
 import { ContractualTextTemplate } from "@/entities/ContractualTextTemplate";
 import { User } from "@/entities/User";
+import { isSuperAdmin } from "@/utils/roles";
 import { GlobalRates } from "@/entities/GlobalRates";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +41,17 @@ const statusLabels = {
   rejected: "Zamítnuto",
   paid: "Zaplaceno"
 };
+
+function normalizeNamePart(str) {
+  if (!str || typeof str !== 'string') return null;
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_]/g, '')
+    .replace(/^(.)/, c => c.toUpperCase());
+}
 
 export default function MyInvoices() {
   const [invoices, setInvoices] = useState([]);
@@ -90,7 +102,7 @@ export default function MyInvoices() {
       let workerId = currentUser.worker_profile_id;
       
       // Pokud admin impersonuje, použij impersonated ID
-      if (impersonatedId && currentUser.app_role === 'admin') {
+      if (impersonatedId && isSuperAdmin(currentUser)) {
         workerId = impersonatedId;
       }
 
@@ -517,8 +529,18 @@ export default function MyInvoices() {
       const totalWithVat = totalAmount + vatAmount;
 
       const projectNumber = selectedProject.project_number || selectedProject.name.split('_')[0] || 'PROJ';
-      const projectInvoicesCount = invoices.filter(inv => inv.project_id === selectedProjectId).length;
-      const invoiceNumber = `${projectNumber}_${String(projectInvoicesCount + 1).padStart(4, '0')}`;
+
+      const firstName = normalizeNamePart(worker?.first_name);
+      const lastName = normalizeNamePart(worker?.last_name);
+      const workerSlug = (firstName && lastName)
+        ? `${firstName}_${lastName}`
+        : (firstName || lastName || (worker?.id ? `W${String(worker.id).slice(0, 6)}` : 'Worker'));
+
+      const workerProjectInvoicesCount = invoices.filter(
+        inv => inv.project_id === selectedProjectId && inv.worker_id === worker.id
+      ).length;
+
+      const invoiceNumber = `${projectNumber}_${workerSlug}_${String(workerProjectInvoicesCount + 1).padStart(2, '0')}`;
       const issueDate = selectedProject.start_date;
 
       const invoiceData = {

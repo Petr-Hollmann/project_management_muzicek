@@ -3,6 +3,7 @@ import { Invoice } from '@/entities/Invoice';
 import { Project } from '@/entities/Project';
 import { Worker } from '@/entities/Worker';
 import { User } from '@/entities/User';
+import { isPrivileged } from '@/utils/roles';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,9 +29,9 @@ export default function PendingInvoicesWidget() {
   const loadData = async () => {
     try {
       const user = await User.me();
-      setIsAdmin(user.app_role === 'admin');
+      setIsAdmin(isPrivileged(user));
 
-      if (user.app_role !== 'admin') {
+      if (!isPrivileged(user)) {
         setIsLoading(false);
         return;
       }

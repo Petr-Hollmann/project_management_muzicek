@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Users, Car, CheckCircle, XCircle, AlertCircle, Trash2, Pencil, AlertTriangle } from 'lucide-react';
+import { Plus, Users, Car, Shield, CheckCircle, XCircle, AlertCircle, Trash2, Pencil, AlertTriangle, X } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale'; 
@@ -332,12 +333,16 @@ export default function ResourceAssignments({
   assignments,
   allAssignments,
   allProjects,
-  onAddClick, 
-  onEditClick, 
+  onAddClick,
+  onEditClick,
   onDeleteClick,
   workers,
   vehicles,
-  isAdmin
+  isAdmin,
+  supervisorUsers = [],
+  allPrivilegedUsers = [],
+  onAddSupervisor,
+  onRemoveSupervisor,
 }) {
   const assignedWorkers = useMemo(() => assignments.filter(a => a.worker_id), [assignments]);
   const assignedVehicles = useMemo(() => assignments.filter(a => a.vehicle_id), [assignments]);
@@ -508,6 +513,66 @@ export default function ResourceAssignments({
               })}
             </ul>
           ) : <p className="text-slate-500 text-sm">Žádná vozidla nejsou přiřazena.</p>}
+        </CardContent>
+      </Card>
+
+      {/* Supervisors Card */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 no-print">
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <Shield className="w-5 h-5" />
+            Vedoucí projektu
+            <span className="text-sm font-normal text-slate-500">({supervisorUsers.length})</span>
+          </CardTitle>
+          {isAdmin && allPrivilegedUsers.length > 0 && (
+            <Select onValueChange={(userId) => onAddSupervisor?.(userId)} value="">
+              <SelectTrigger className="w-[180px] h-9 text-sm">
+                <SelectValue placeholder="+ Přidat vedoucího" />
+              </SelectTrigger>
+              <SelectContent>
+                {allPrivilegedUsers
+                  .filter(u => !supervisorUsers.some(s => s.id === u.id))
+                  .map(u => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.full_name || u.email}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          )}
+        </CardHeader>
+        <CardContent>
+          {supervisorUsers.length > 0 ? (
+            <ul className="space-y-3">
+              {supervisorUsers.map(user => {
+                const roleLabel = user.app_role === 'admin' ? 'Administrátor' : 'Supervisor';
+                const roleColor = user.app_role === 'admin' ? 'bg-purple-50 text-purple-700' : 'bg-amber-50 text-amber-700';
+                return (
+                  <li key={user.id} className="flex items-center justify-between gap-2 p-3 rounded-md hover:bg-slate-50 border-b last:border-b-0">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <Avatar className="h-9 w-9 flex-shrink-0">
+                        <AvatarFallback>
+                          {(user.full_name || user.email || '??').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="font-medium">{user.full_name || user.email}</p>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className={`text-xs ${roleColor}`}>{roleLabel}</Badge>
+                          {user.phone && <span className="text-xs text-slate-400">{user.phone}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    {isAdmin && (
+                      <Button variant="ghost" size="icon" onClick={() => onRemoveSupervisor?.(user.id)} className="no-print">
+                        <X className="w-4 h-4 text-red-500" />
+                      </Button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : <p className="text-slate-500 text-sm">Žádní vedoucí nejsou přiřazeni.</p>}
         </CardContent>
       </Card>
     </div>

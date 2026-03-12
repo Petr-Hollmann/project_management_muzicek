@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-import { Users, Loader2, Building2, FileText, DollarSign, UserCircle, KeyRound, ClipboardList } from 'lucide-react';
+import { Users, Loader2, Building2, FileText, DollarSign, UserCircle, KeyRound, ClipboardList, Wrench } from 'lucide-react';
+import { isPrivileged } from '@/utils/roles';
 import { useToast } from "@/components/ui/use-toast";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,6 +18,7 @@ import DefaultHourlyRateManagement from '../components/settings/DefaultHourlyRat
 import RoleTestingManagement from '../components/settings/RoleTestingManagement';
 import ChangePasswordDialog from '../components/ChangePasswordDialog';
 import TaskTemplateManagement from '../components/settings/TaskTemplateManagement';
+import InstallerUserManagement from '../components/settings/InstallerUserManagement';
 
 export default function SettingsPage() {
   const [workers, setWorkers] = useState([]);
@@ -54,7 +56,7 @@ export default function SettingsPage() {
     loadAllData();
   }, [loadAllData]); // Dependency: loadAllData
 
-  const isAdmin = currentUser?.app_role === 'admin';
+  const isAdmin = isPrivileged(currentUser);
 
   return (
     <div className="p-4 bg-slate-50 min-h-screen">
@@ -69,10 +71,14 @@ export default function SettingsPage() {
             <>
                 <ChangePasswordDialog open={showChangePassword} onOpenChange={setShowChangePassword} />
                 <Tabs defaultValue="users" className="space-y-4">
-                  <TabsList className="grid w-full grid-cols-7 gap-1">
+                  <TabsList className="grid w-full grid-cols-8 gap-1">
                     <TabsTrigger value="users" className="text-xs md:text-sm">
                       <Users className="w-4 h-4 md:mr-2" />
-                      <span className="hidden sm:inline ml-1 md:ml-0">Uživatelé</span>
+                      <span className="hidden sm:inline ml-1 md:ml-0">Správci</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="installers" className="text-xs md:text-sm">
+                      <Wrench className="w-4 h-4 md:mr-2" />
+                      <span className="hidden sm:inline ml-1 md:ml-0">Montážníci</span>
                     </TabsTrigger>
                     <TabsTrigger value="testing" className="text-xs md:text-sm">
                       <UserCircle className="w-4 h-4 md:mr-2" />
@@ -105,15 +111,31 @@ export default function SettingsPage() {
                       <CardHeader className="pb-3">
                         <CardTitle className="flex items-center gap-2 text-lg">
                            <Users className="w-5 h-5" />
-                           Správa uživatelů
+                           Správa administrátorů a supervisorů
                         </CardTitle>
                         <CardDescription className="text-sm">
-                            Zde můžete spravovat role všech uživatelů v systému.
-                            Také můžete přiřadit uživatelský účet k profilu montážníka.
+                            Správa administrátorů a supervisorů systému. Montážníci jsou spravováni na stránce Montážníci.
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="px-0 sm:px-6">
-                         <UserManagement users={users} workers={workers} onUserUpdate={loadAllData} />
+                         <UserManagement users={users} workers={workers} currentUser={currentUser} onUserUpdate={loadAllData} />
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="installers" className="mt-4">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                           <Wrench className="w-5 h-5" />
+                           Správa montážníků
+                        </CardTitle>
+                        <CardDescription className="text-sm">
+                            Přiřazení uživatelských účtů montážníků k jejich profilům v systému.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="px-0 sm:px-6">
+                         <InstallerUserManagement users={users} workers={workers} onUserUpdate={loadAllData} />
                       </CardContent>
                     </Card>
                   </TabsContent>

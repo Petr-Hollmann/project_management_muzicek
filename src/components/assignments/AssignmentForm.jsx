@@ -12,6 +12,7 @@ import { format, isWithinInterval, parseISO, isBefore, isAfter } from 'date-fns'
 import { cs } from 'date-fns/locale';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import ResourcePicker from './ResourcePicker';
+import { isPrivileged } from '@/utils/roles';
 
 const seniorityLabels = {
   junior: "Junior",
@@ -63,7 +64,7 @@ export default function AssignmentForm({ resourceType, project, allWorkers, allV
           
           if (selectedWorker && selectedWorker.seniority) {
             const users = await User.list();
-            const adminUser = users.find(u => u.app_role === 'admin');
+            const adminUser = users.find(u => isPrivileged(u));
             
             if (adminUser?.default_hourly_rates && adminUser.default_hourly_rates[selectedWorker.seniority]) {
               setAssignment(prev => ({

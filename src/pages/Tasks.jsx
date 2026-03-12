@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Task } from '@/entities/Task';
 import { Project } from '@/entities/Project';
 import { User } from '@/entities/User';
+import { isPrivileged, isSuperAdmin } from '@/utils/roles';
 import { Assignment } from '@/entities/Assignment';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -221,6 +223,15 @@ export default function Tasks() {
   const [editingTask, setEditingTask] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, task: null });
   const { toast } = useToast();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.openNewForm) {
+      setEditingTask(null);
+      setShowModal(true);
+      window.history.replaceState({}, '');
+    }
+  }, []);
 
   // Filters (arrays = multi-select)
   const [search, setSearch] = useState('');
@@ -237,7 +248,7 @@ export default function Tasks() {
       const user = await User.me();
       setCurrentUser(user);
 
-      if (user.app_role === 'admin') {
+      if (isPrivileged(user)) {
         const [tasksData, usersData, projectsData, assignmentsData] = await Promise.all([
           Task.list('due_date'),
           User.list(),
@@ -271,10 +282,29 @@ export default function Tasks() {
 
   const usersById = users.reduce((acc, u) => ({ ...acc, [u.id]: u }), {});
   const projectsById = projects.reduce((acc, p) => ({ ...acc, [p.id]: p }), {});
-  const isAdmin = currentUser?.app_role === 'admin';
+  const isAdmin = isPrivileged(currentUser);
+  const isFullAdmin = isSuperAdmin(currentUser);
+
+  // Supervisor sees only own tasks + installer tasks (not other admin/supervisor tasks)
+  const visibleTasks = useMemo(() => {
+    if (!isAdmin || isFullAdmin) return tasks; // admin sees all, installer already filtered by API
+    // Supervisor: filter to own tasks + tasks assigned to installers (or unassigned)
+    return tasks.filter(task => {
+      // Tasks created by or assigned to this supervisor
+      if (task.created_by_user_id === currentUser?.id) return true;
+      if (task.assigned_to_user_id === currentUser?.id) return true;
+      // Unassigned tasks — only show if created by this supervisor (already covered above)
+      if (!task.assigned_to_user_id) return false;
+      // Tasks assigned to installers
+      const assignee = usersById[task.assigned_to_user_id];
+      if (assignee?.app_role === 'installer') return true;
+      // Unknown user (not in usersById) — hide to be safe
+      return false;
+    });
+  }, [tasks, isAdmin, isFullAdmin, currentUser?.id, usersById]);
 
   const filteredTasks = useMemo(() => {
-    return tasks.filter(task => {
+    return visibleTasks.filter(task => {
       if (search) {
         const q = search.toLowerCase();
         const title = (task.title || '').toLowerCase();
@@ -300,7 +330,7 @@ export default function Tasks() {
       if (filterDueDateTo && task.due_date && task.due_date > filterDueDateTo) return false;
       return true;
     });
-  }, [tasks, search, filterProject, filterAssignee, filterStatus, filterPriority, filterDueDateFrom, filterDueDateTo]);
+  }, [visibleTasks, search, filterProject, filterAssignee, filterStatus, filterPriority, filterDueDateFrom, filterDueDateTo]);
 
   const hasActiveFilters = search || filterProject.length > 0 || filterAssignee.length > 0 ||
     filterStatus.length > 0 || filterPriority.length > 0 || filterDueDateFrom || filterDueDateTo;
@@ -373,7 +403,7 @@ export default function Tasks() {
               {isAdmin ? 'Úkoly' : 'Moje úkoly'}
             </h1>
             <p className="text-slate-600">
-              {isAdmin ? 'Správa všech úkolů v systému' : 'Přehled vašich přiřazených úkolů'}
+              {isFullAdmin ? 'Správa všech úkolů v systému' : isAdmin ? 'Vaše úkoly a úkoly montážníků' : 'Přehled vašich přiřazených úkolů'}
             </p>
           </div>
           {isAdmin && (
@@ -456,29 +486,55 @@ export default function Tasks() {
 
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">Termín od</Label>
-                <Input
-                  type="date"
-                  value={filterDueDateFrom}
-                  onChange={e => setFilterDueDateFrom(e.target.value)}
-                  className="text-sm"
-                />
+                <div className="flex gap-1.5">
+                  <Input
+                    type="date"
+                    value={filterDueDateFrom}
+                    onChange={e => setFilterDueDateFrom(e.target.value)}
+                    className="text-sm flex-1 min-w-0"
+                  />
+                  {filterDueDateFrom && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 flex-shrink-0 text-slate-400 hover:text-slate-700"
+                      onClick={() => setFilterDueDateFrom('')}
+                      title="Zrušit datum"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">Termín do</Label>
-                <Input
-                  type="date"
-                  value={filterDueDateTo}
-                  onChange={e => setFilterDueDateTo(e.target.value)}
-                  className="text-sm"
-                />
+                <div className="flex gap-1.5">
+                  <Input
+                    type="date"
+                    value={filterDueDateTo}
+                    onChange={e => setFilterDueDateTo(e.target.value)}
+                    className="text-sm flex-1 min-w-0"
+                  />
+                  {filterDueDateTo && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 flex-shrink-0 text-slate-400 hover:text-slate-700"
+                      onClick={() => setFilterDueDateTo('')}
+                      title="Zrušit datum"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 
             {hasActiveFilters && (
               <div className="flex items-center justify-between pt-1">
                 <span className="text-sm text-slate-500">
-                  Zobrazeno {filteredTasks.length} z {tasks.length} úkolů
+                  Zobrazeno {filteredTasks.length} z {visibleTasks.length} úkolů
                 </span>
                 <Button variant="ghost" size="sm" onClick={resetFilters} className="text-slate-500 h-7 px-2">
                   <X className="w-3 h-3 mr-1" />
@@ -494,7 +550,7 @@ export default function Tasks() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">
-                Všechny úkoly ({filteredTasks.length}{hasActiveFilters ? ` / ${tasks.length}` : ''})
+                {isFullAdmin ? 'Všechny úkoly' : 'Úkoly'} ({filteredTasks.length}{hasActiveFilters ? ` / ${visibleTasks.length}` : ''})
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -508,6 +564,7 @@ export default function Tasks() {
                 isLoading={isLoading}
                 isAdmin={true}
                 showCompletedBy={true}
+                showCreatedBy={true}
               />
             </CardContent>
           </Card>

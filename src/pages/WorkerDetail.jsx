@@ -3,6 +3,7 @@ import { Worker } from "@/entities/Worker";
 import { Assignment } from "@/entities/Assignment";
 import { Project } from "@/entities/Project";
 import { User } from "@/entities/User";
+import { isPrivileged, isSuperAdmin } from "@/utils/roles";
 import { TimesheetEntry } from "@/entities/TimesheetEntry";
 import { Vehicle } from "@/entities/Vehicle";
 import { Certificate } from "@/entities/Certificate";
@@ -55,7 +56,7 @@ export default function WorkerDetail() {
         const impersonatedId = localStorage.getItem('impersonated_worker_id');
         
         if (!workerId && currentUser) {
-          if (impersonatedId && currentUser.app_role === 'admin') {
+          if (impersonatedId && isSuperAdmin(currentUser)) {
             workerId = impersonatedId;
           } else if (currentUser.app_role === 'installer' && currentUser.worker_profile_id) {
             workerId = currentUser.worker_profile_id;
@@ -274,9 +275,9 @@ export default function WorkerDetail() {
   };
 
   const impersonatedId = localStorage.getItem('impersonated_worker_id');
-  const isImpersonating = user?.app_role === 'admin' && impersonatedId;
-  
-  const isAdmin = user?.app_role === 'admin' && !isImpersonating;
+  const isImpersonating = isSuperAdmin(user) && impersonatedId;
+
+  const isAdmin = isPrivileged(user) && !isImpersonating;
   
   const isOwnProfile = (user?.app_role === 'installer' && user?.worker_profile_id === worker?.id) || 
                        (isImpersonating && impersonatedId === worker?.id);

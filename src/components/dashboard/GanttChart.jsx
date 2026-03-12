@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MultiSelect } from "@/components/ui/MultiSelect";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const statusColors = {
   preparing: "rgb(107, 114, 128)",
@@ -424,6 +425,7 @@ export default function GanttChart({
             return {
               id: `assignment-${a.id}`,
               label: project.name,
+              shortLabel: project.name.split('_')[0] || project.name,
               start: new Date(a.start_date),
               end: new Date(a.end_date),
               color: statusColors[project.status],
@@ -491,6 +493,7 @@ export default function GanttChart({
             return {
               id: `assignment-${a.id}`,
               label: project.name,
+              shortLabel: project.name.split('_')[0] || project.name,
               start: new Date(a.start_date),
               end: new Date(a.end_date),
               color: statusColors[project.status],
@@ -915,7 +918,7 @@ export default function GanttChart({
             {ganttItems.length > 0 ? ganttItems.map((item, rowIndex) => (
               <React.Fragment key={`${item.id}-${rowIndex}`}>
                 {/* Resource Name */}
-                <div className="sticky left-0 z-10 bg-white border-r border-b px-4 py-4 text-sm font-medium">
+                <div className="sticky left-0 z-20 bg-white border-r border-b px-4 py-4 text-sm font-medium">
                   <Link to={item.link} className="hover:text-blue-600 hover:underline block">
                     <div className="truncate">{item.label}</div>
                     {item.subLabel && (
@@ -924,70 +927,120 @@ export default function GanttChart({
                   </Link>
                 </div>
 
-                {/* Timeline Cells */}
-                {days.map((day, dayIndex) => {
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  const dayDate = new Date(day);
-                  dayDate.setHours(0, 0, 0, 0);
-                  const isToday = dayDate.getTime() === today.getTime();
-                  
-                  // Find all bars that are active on this specific day to enable stacking
-                  const activeBarsForDay = item.bars.filter(bar => {
-                    if (!bar.start || !bar.end) return false;
-                    const taskStart = new Date(bar.start);
-                    taskStart.setHours(0, 0, 0, 0);
-                    const taskEnd = new Date(bar.end);
-                    taskEnd.setHours(23, 59, 59, 999);
-                    const dayStart = new Date(day);
-                    dayStart.setHours(0, 0, 0, 0);
-                    return dayStart >= taskStart && dayStart <= taskEnd;
+                {/* Timeline — single wrapper spanning all day columns */}
+                {(() => {
+                  const pStart = new Date(days[0]); pStart.setHours(0, 0, 0, 0);
+                  const pEnd = new Date(days[days.length - 1]); pEnd.setHours(23, 59, 59, 999);
+
+                  // Only bars overlapping the visible period, sorted by start date
+                  const visibleBars = item.bars
+                    .filter(bar => {
+                      if (!bar.start || !bar.end) return false;
+                      const bs = new Date(bar.start); bs.setHours(0, 0, 0, 0);
+                      const be = new Date(bar.end); be.setHours(23, 59, 59, 999);
+                      return bs <= pEnd && be >= pStart;
+                    })
+                    .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+                  // Assign bars to lanes: non-overlapping bars share the same lane
+                  const laneEndTimes = []; // tracks the end time of the last bar in each lane
+                  const barsWithLanes = visibleBars.map(bar => {
+                    const bs = new Date(bar.start); bs.setHours(0, 0, 0, 0);
+                    const be = new Date(bar.end); be.setHours(23, 59, 59, 999);
+                    let lane = 0;
+                    while (laneEndTimes[lane] !== undefined && laneEndTimes[lane] >= bs.getTime()) {
+                      lane++;
+                    }
+                    laneEndTimes[lane] = be.getTime();
+                    return { ...bar, lane };
                   });
+
+                  const laneCount = laneEndTimes.length || 1;
 
                   return (
                     <div
-                      key={`${item.id}-day-${dayIndex}`}
-                      className={`border-r border-b relative p-0.5 space-y-0.5 ${
-                        isToday ? 'bg-blue-50/30' : 'bg-white'
-                      }`}
-                      style={{ minHeight: '60px', minWidth: '40px' }}
+                      className="relative border-b overflow-hidden"
+                      style={{
+                        gridColumn: `2 / span ${days.length}`,
+                        minHeight: `${Math.max(40, laneCount * 24 + 16)}px`,
+                      }}
                     >
-                      {/* Today indicator line */}
-                      {isToday && (
-                        <div 
-                          className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-blue-500 opacity-50 pointer-events-none z-30"
-                          style={{ transform: 'translateX(-50%)' }}
-                        />
-                      )}
-                      
-                      {activeBarsForDay.map(bar => {
-                        const taskStart = new Date(bar.start);
-                        taskStart.setHours(0, 0, 0, 0);
-                        const dayStart = new Date(day);
-                        dayStart.setHours(0, 0, 0, 0);
+                      {/* Background: day cell grid lines + today highlight */}
+                      <div
+                        className="absolute inset-0 grid pointer-events-none"
+                        style={{ gridTemplateColumns: `repeat(${days.length}, 1fr)` }}
+                      >
+                        {days.map((day, i) => {
+                          const d = new Date(day); d.setHours(0, 0, 0, 0);
+                          const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+                          const isToday = d.getTime() === todayD.getTime();
+                          return (
+                            <div key={i} className={`h-full border-r relative ${isToday ? 'bg-blue-50/30' : ''}`}>
+                              {isToday && (
+                                <div
+                                  className="absolute inset-y-0 left-1/2 w-0.5 bg-blue-500 opacity-50"
+                                  style={{ transform: 'translateX(-50%)' }}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
 
-                        // Show label only on the first day of the assignment
-                        const isFirstDay = taskStart.getTime() === dayStart.getTime();
+                      {/* Continuous bars, lane-packed to minimize row height */}
+                      {barsWithLanes.map((bar) => {
+                        const barStart = new Date(bar.start); barStart.setHours(0, 0, 0, 0);
+                        const barEnd = new Date(bar.end); barEnd.setHours(23, 59, 59, 999);
+
+                        // Clamp to visible period boundaries
+                        let startIdx = days.findIndex(d => {
+                          const dd = new Date(d); dd.setHours(0, 0, 0, 0);
+                          return dd >= barStart;
+                        });
+                        if (startIdx === -1) startIdx = 0;
+
+                        let endIdx = -1;
+                        for (let i = days.length - 1; i >= 0; i--) {
+                          const dd = new Date(days[i]); dd.setHours(0, 0, 0, 0);
+                          if (dd <= barEnd) { endIdx = i; break; }
+                        }
+                        if (endIdx === -1) endIdx = days.length - 1;
+                        if (endIdx < startIdx) return null;
+
+                        const leftPct = (startIdx / days.length) * 100;
+                        const widthPct = ((endIdx - startIdx + 1) / days.length) * 100;
+                        const topPx = bar.lane * 24 + 8;
 
                         return (
-                          <Link
-                            key={`bar-${bar.id}-${dayIndex}`}
-                            to={bar.link || '#'}
-                            className="w-full h-5 rounded-sm flex items-center px-2 text-white text-xs font-medium hover:opacity-80 transition-opacity overflow-hidden"
-                            style={{ backgroundColor: bar.color }}
-                            title={`${bar.label} (${format(new Date(bar.start), 'd.M.', { locale: cs })} - ${format(new Date(bar.end), 'd.M.', { locale: cs })})`}
-                          >
-                            {isFirstDay && (
-                              <span className="truncate font-semibold">
-                                {bar.label}
-                              </span>
-                            )}
-                          </Link>
+                          <TooltipProvider key={bar.id} delayDuration={300}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Link
+                                  to={bar.link || '#'}
+                                  className="absolute h-5 rounded-sm flex items-center px-2 text-white text-xs font-medium hover:opacity-80 transition-opacity overflow-hidden"
+                                  style={{
+                                    left: `calc(${leftPct}% + 2px)`,
+                                    width: `calc(${widthPct}% - 4px)`,
+                                    top: `${topPx}px`,
+                                    backgroundColor: bar.color,
+                                    minWidth: '6px',
+                                    zIndex: 10,
+                                  }}
+                                >
+                                  <span className="truncate font-semibold">{bar.shortLabel || bar.label}</span>
+                                </Link>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-center">
+                                <p className="font-semibold">{bar.label}</p>
+                                <p className="text-xs opacity-80">{format(new Date(bar.start), 'd.M.yyyy', { locale: cs })} – {format(new Date(bar.end), 'd.M.yyyy', { locale: cs })}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         );
                       })}
                     </div>
                   );
-                })}
+                })()}
               </React.Fragment>
             )) : (
               <div

@@ -4,6 +4,7 @@ import { Assignment } from "@/entities/Assignment";
 import { Worker } from "@/entities/Worker";
 import { Vehicle } from "@/entities/Vehicle";
 import { User } from "@/entities/User";
+import { isPrivileged } from "@/utils/roles";
 import { TimesheetEntry } from "@/entities/TimesheetEntry";
 import { ProjectCost } from "@/entities/ProjectCost";
 import { Task } from "@/entities/Task";
@@ -526,7 +527,7 @@ export default function ProjectDetail() {
 
   const handlePrint = () => window.print();
 
-  const isAdmin = user?.app_role === 'admin';
+  const isAdmin = isPrivileged(user);
 
   // Total costs in CZK — must match ProjectCosts.jsx grand total:
   // labor (approved timesheets × rate) + invoice items (approved invoices) + manual costs (no source_invoice_id)
@@ -677,6 +678,31 @@ export default function ProjectDetail() {
                   workers={workers}
                   vehicles={vehicles}
                   isAdmin={isAdmin}
+                  supervisorUsers={allUsers.filter(u => (project.supervisor_user_ids || []).includes(u.id))}
+                  allPrivilegedUsers={allUsers.filter(u => u.app_role === 'admin' || u.app_role === 'supervisor')}
+                  onAddSupervisor={async (userId) => {
+                    try {
+                      const currentIds = project.supervisor_user_ids || [];
+                      if (currentIds.includes(userId)) return;
+                      await Project.update(project.id, { supervisor_user_ids: [...currentIds, userId] });
+                      await loadProjectData(project.id);
+                      toast({ title: "Úspěch", description: "Vedoucí byl přiřazen k projektu." });
+                    } catch (error) {
+                      console.error("Error adding supervisor:", error);
+                      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se přiřadit vedoucího." });
+                    }
+                  }}
+                  onRemoveSupervisor={async (userId) => {
+                    try {
+                      const currentIds = project.supervisor_user_ids || [];
+                      await Project.update(project.id, { supervisor_user_ids: currentIds.filter(id => id !== userId) });
+                      await loadProjectData(project.id);
+                      toast({ title: "Úspěch", description: "Vedoucí byl odebrán z projektu." });
+                    } catch (error) {
+                      console.error("Error removing supervisor:", error);
+                      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se odebrat vedoucího." });
+                    }
+                  }}
                 />
               </TabsContent>
 

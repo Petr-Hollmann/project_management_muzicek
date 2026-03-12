@@ -4,6 +4,7 @@ import { Assignment } from "@/entities/Assignment";
 import { Worker } from "@/entities/Worker";
 import { Vehicle } from "@/entities/Vehicle";
 import { User } from "@/entities/User";
+import { isSuperAdmin } from "@/utils/roles";
 import { Task } from "@/entities/Task";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, MapPin, Calendar, Users, Car, CheckSquare, Check } from "lucide-react";
@@ -108,7 +109,7 @@ export default function InstallerProjectDetail() {
 
         // Zkontroluj, zda je admin
         const impersonatedId = localStorage.getItem('impersonated_worker_id');
-        const isAdminUser = userData?.app_role === 'admin' && !impersonatedId;
+        const isAdminUser = isSuperAdmin(userData) && !impersonatedId;
         setIsAdmin(isAdminUser);
 
         if (!projectData) {

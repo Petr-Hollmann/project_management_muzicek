@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User } from '@/entities/User';
+import { isPrivileged } from '@/utils/roles';
 import { TimesheetEntry } from '@/entities/TimesheetEntry';
 import { Project } from '@/entities/Project';
 import { Worker } from '@/entities/Worker';
@@ -13,6 +14,7 @@ import {
   Clock,
   CheckCircle,
   XCircle,
+  X,
   Search,
   Filter,
   Calendar,
@@ -94,7 +96,7 @@ export default function TimesheetApproval() {
         Worker.list(),
       ]);
 
-      if (currentUser.app_role !== 'admin') {
+      if (!isPrivileged(currentUser)) {
         toast({
           variant: 'destructive',
           title: 'Přístup odepřen',
@@ -339,7 +341,7 @@ export default function TimesheetApproval() {
     );
   }
 
-  if (user?.app_role !== 'admin') {
+  if (!isPrivileged(user)) {
     return (
       <div className="p-4 md:p-8 bg-slate-50 min-h-screen flex items-center justify-center">
         <Card className="w-full max-w-md">
@@ -494,18 +496,24 @@ export default function TimesheetApproval() {
               </div>
             </div>
 
-            {(searchQuery || filterStatus !== 'submitted' || filterProject !== 'all' || filterWorker !== 'all') && (
-              <div className="mt-4">
+            {(searchQuery || !(filterStatus.length === 1 && filterStatus[0] === 'submitted') || filterProject.length > 0 || filterWorker.length > 0) && (
+              <div className="mt-4 flex items-center justify-between">
+                <span className="text-sm text-slate-500">
+                  Zobrazeno {filteredEntries.length} z {entries.length} výkazů
+                </span>
                 <Button
                   variant="ghost"
+                  size="sm"
                   onClick={() => {
                     setSearchQuery('');
-                    setFilterStatus('submitted');
-                    setFilterProject('all');
-                    setFilterWorker('all');
+                    setFilterStatus(['submitted']);
+                    setFilterProject([]);
+                    setFilterWorker([]);
                   }}
+                  className="text-slate-500 hover:text-slate-700"
                 >
-                  Zrušit všechny filtry
+                  <X className="w-3 h-3 mr-1" />
+                  Zrušit filtry
                 </Button>
               </div>
             )}

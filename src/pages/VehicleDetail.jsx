@@ -4,6 +4,7 @@ import { Vehicle } from "@/entities/Vehicle";
 import { Assignment } from "@/entities/Assignment";
 import { Project } from "@/entities/Project";
 import { User } from "@/entities/User";
+import { isPrivileged } from "@/utils/roles";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -278,7 +279,7 @@ export default function VehicleDetail() {
     in_service: "bg-yellow-100 text-yellow-800"
   };
 
-  const isAdmin = user?.app_role === 'admin';
+  const isAdmin = isPrivileged(user);
 
   if (isLoading) {
     return (

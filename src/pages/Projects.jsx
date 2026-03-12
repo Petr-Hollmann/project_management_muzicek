@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Project } from "@/entities/Project";
 import { User } from "@/entities/User";
+import { isPrivileged, isSuperAdmin } from "@/utils/roles";
 import { Task } from "@/entities/Task";
 import { TaskTemplate } from "@/entities/TaskTemplate";
 import { Button } from "@/components/ui/button";
-import { Plus, FolderOpen, Search, Download, CalendarDays } from "lucide-react";
+import { Plus, FolderOpen, Search, Download, CalendarDays, Star } from "lucide-react";
 import { downloadProjectsICS } from "../utils/exportICS";
 import CalendarFeedDialog from "../components/projects/CalendarFeedDialog";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { usePersistentState } from "@/components/hooks";
 import { Label } from "@/components/ui/label";
@@ -23,7 +24,9 @@ import { Assignment } from "@/entities/Assignment";
 import { Worker } from "@/entities/Worker";
 import { Vehicle } from "@/entities/Vehicle";
 import { ProjectCost } from "@/entities/ProjectCost";
-import BudgetSummaryTable from "../components/projects/BudgetSummaryTable";
+import { TimesheetEntry } from "@/entities/TimesheetEntry";
+import { Invoice } from "@/entities/Invoice";
+// BudgetSummaryTable removed — costs now integrated into ProjectsTable
 import { fetchTodayCNBRates } from "@/lib/cnb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "lucide-react";
@@ -34,6 +37,8 @@ export default function Projects() {
   const [vehicles, setVehicles] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [allCosts, setAllCosts] = useState([]);
+  const [allTimesheets, setAllTimesheets] = useState([]);
+  const [allInvoices, setAllInvoices] = useState([]);
   const [cnbRates, setCnbRates] = useState({});
   const [user, setUser] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -49,11 +54,14 @@ export default function Projects() {
   const [filters, setFilters] = usePersistentState('projectFilters', defaultFilters);
 
   const [sortConfig, setSortConfig] = usePersistentState('projectSortConfig', { key: 'name', direction: 'asc' });
+  const [onlyMine, setOnlyMine] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // New state for delete confirmation dialog
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, projectId: null });
   const [showCalendarFeed, setShowCalendarFeed] = useState(false);
+
+  const location = useLocation();
 
   // useEffect pro načítání filtrů byl odstraněn, protože usePersistentState již tuto logiku zajišťuje při inicializaci.
   // Předpokládá se, že usePersistentState je upraven tak, aby správně parsoval Date objekty, nebo že Date objekty nejsou uloženy jako stringy.
@@ -64,13 +72,15 @@ export default function Projects() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [projectsData, userData, workersData, vehiclesData, assignmentsData, costsData] = await Promise.all([
+      const [projectsData, userData, workersData, vehiclesData, assignmentsData, costsData, timesheetsData, invoicesData] = await Promise.all([
         Project.list(),
         User.me().catch(() => null),
         Worker.list(),
         Vehicle.list(),
         Assignment.list(),
-        ProjectCost.list()
+        ProjectCost.list(),
+        TimesheetEntry.list(),
+        Invoice.list()
       ]);
 
       // --- One-time Data Migration Script ---
@@ -134,6 +144,8 @@ export default function Projects() {
       setVehicles(vehiclesData);
       setAssignments(assignmentsData);
       setAllCosts(costsData);
+      setAllTimesheets(timesheetsData);
+      setAllInvoices(invoicesData);
 
       // Fetch CNB rates for foreign budget currencies
       const foreignCurrencies = [...new Set(
@@ -200,6 +212,13 @@ export default function Projects() {
     setShowForm(true);
   };
 
+  useEffect(() => {
+    if (location.state?.openNewForm) {
+      openForm();
+      window.history.replaceState({}, '');
+    }
+  }, []);
+
   const closeForm = () => {
     setShowForm(false);
     setEditingProject(null);
@@ -253,9 +272,12 @@ export default function Projects() {
 
   const filteredProjectsForGantt = useMemo(() => {
     return projects.filter(project => {
+      if (onlyMine && user) {
+        const sups = project.supervisor_user_ids || [];
+        if (!sups.includes(user.id)) return false;
+      }
       const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            project.location.toLowerCase().includes(searchTerm.toLowerCase());
-      // Use the same filters as the table - synchronized!
       const matchesStatus = filters.status.length === 0 || filters.status.includes(project.status);
       const matchesPriority = filters.priority.length === 0 || filters.priority.includes(project.priority);
       const projectDate = new Date(project.start_date);
@@ -263,10 +285,14 @@ export default function Projects() {
                           (!filters.dateRange?.to || projectDate <= filters.dateRange.to);
       return matchesSearch && matchesStatus && matchesPriority && matchesDate;
     });
-  }, [projects, searchTerm, filters]);
+  }, [projects, searchTerm, filters, onlyMine, user]);
   
   const sortedAndFilteredProjects = useMemo(() => {
     let filtered = projects.filter(project => {
+      if (onlyMine && user) {
+        const sups = project.supervisor_user_ids || [];
+        if (!sups.includes(user.id)) return false;
+      }
       const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            project.location.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = filters.status.length === 0 || filters.status.includes(project.status);
@@ -278,45 +304,96 @@ export default function Projects() {
       return matchesSearch && matchesStatus && matchesPriority && matchesDate;
     });
 
+    const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+    const STATUS_ORDER = { in_progress: 0, preparing: 1, paused: 2, completed: 3 };
+
     return filtered.sort((a, b) => {
       if (sortConfig.key === 'name') {
-        // Pro název použijeme abecední řazení
-        return sortConfig.direction === 'asc' 
+        return sortConfig.direction === 'asc'
           ? a.name.localeCompare(b.name, 'cs', { sensitivity: 'base' })
           : b.name.localeCompare(a.name, 'cs', { sensitivity: 'base' });
       }
-      
-      // Pro ostatní pole zachováváme původní logiku
+
+      if (sortConfig.key === 'priority') {
+        const diff = (PRIORITY_ORDER[a.priority] ?? 1) - (PRIORITY_ORDER[b.priority] ?? 1);
+        return sortConfig.direction === 'asc' ? diff : -diff;
+      }
+
+      if (sortConfig.key === 'status') {
+        const diff = (STATUS_ORDER[a.status] ?? 3) - (STATUS_ORDER[b.status] ?? 3);
+        return sortConfig.direction === 'asc' ? diff : -diff;
+      }
+
       if (a[sortConfig.key] < b[sortConfig.key]) {
         return sortConfig.direction === 'asc' ? -1 : 1;
       }
       if (a[sortConfig.key] > b[sortConfig.key]) {
-        return sortConfig.direction === 'asc' ? 1 : -1; // Fixed potential bug here, should be -1 for desc
+        return sortConfig.direction === 'asc' ? 1 : -1;
       }
       return 0;
     });
-  }, [projects, searchTerm, filters, sortConfig]);
+  }, [projects, searchTerm, filters, sortConfig, onlyMine, user]);
 
   // Callback to sync status filter from Gantt to main filters
   const handleGanttStatusFilterChange = (newStatusFilters) => {
     setFilters(prev => ({ ...prev, status: newStatusFilters }));
   };
 
-  const isAdmin = user?.app_role === 'admin';
+  const isAdmin = isPrivileged(user);
+  const isFullAdmin = isSuperAdmin(user);
+
+  // Pre-calculate costs per project (same logic as ProjectDetail)
+  const costsByProjectId = useMemo(() => {
+    const LABOR_DESCS = new Set(['Cena za dílo', 'Práce', 'Montáž', 'Montážní práce']);
+    const parseItems = (raw) => {
+      if (Array.isArray(raw)) return raw;
+      if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return []; } }
+      return [];
+    };
+
+    const map = {};
+    projects.forEach(p => {
+      const pid = p.id;
+      // 1. Labor — approved timesheets × rate
+      const laborTotal = allTimesheets
+        .filter(t => t.project_id === pid && t.status === 'approved')
+        .reduce((sum, t) => {
+          const assignment = assignments.find(a => a.project_id === pid && a.worker_id === t.worker_id);
+          const worker = workers.find(w => w.id === t.worker_id);
+          const rate = Number(assignment?.hourly_rate) || Number(worker?.hourly_rate_domestic) || 0;
+          return sum + (t.hours_worked || 0) * rate;
+        }, 0);
+      // 2. Invoice items (approved/paid, excluding labor)
+      const invoiceTotal = allInvoices
+        .filter(inv => inv.project_id === pid && (inv.status === 'approved' || inv.status === 'paid'))
+        .reduce((sum, inv) => sum + parseItems(inv.items)
+          .filter(item => !LABOR_DESCS.has((item.description || '').trim()))
+          .reduce((s, item) => s + Number(item.total_price || 0), 0), 0);
+      // 3. Manual costs (no source_invoice_id)
+      const manualTotal = allCosts
+        .filter(c => c.project_id === pid && !c.source_invoice_id)
+        .reduce((sum, c) => sum + Number(c.amount_czk ?? c.amount), 0);
+
+      map[pid] = laborTotal + invoiceTotal + manualTotal;
+    });
+    return map;
+  }, [projects, allTimesheets, allInvoices, allCosts, assignments, workers]);
 
   // Funkce pro resetování filtrů
   const resetFilters = () => {
     setSearchTerm("");
     setFilters(defaultFilters);
+    setOnlyMine(false);
   };
 
   const areFiltersActive = useMemo(() => {
     return searchTerm !== "" ||
+           onlyMine ||
            filters.status.length > 0 ||
            filters.priority.length > 0 ||
            filters.dateRange?.from ||
            filters.dateRange?.to;
-  }, [searchTerm, filters]);
+  }, [searchTerm, filters, onlyMine]);
 
   return (
     <div className="p-4 md:p-8 bg-slate-50 min-h-screen">
@@ -395,13 +472,26 @@ export default function Projects() {
                 />
               </div>
             </div>
-            <ProjectFilters 
-              filters={filters} 
-              onFilterChange={setFilters} 
+            <ProjectFilters
+              filters={filters}
+              onFilterChange={setFilters}
               availableStatuses={availableOptions.availableStatuses}
               availablePriorities={availableOptions.availablePriorities}
             />
           </div>
+          {!isFullAdmin && isAdmin && (
+            <div className="mt-3">
+              <Button
+                variant={onlyMine ? "default" : "outline"}
+                size="sm"
+                onClick={() => setOnlyMine(!onlyMine)}
+                className={onlyMine ? "bg-amber-500 hover:bg-amber-600 text-white" : ""}
+              >
+                <Star className={`w-4 h-4 mr-1.5 ${onlyMine ? 'fill-white' : ''}`} />
+                Moje projekty
+              </Button>
+            </div>
+          )}
           {areFiltersActive && (
             <div className="mt-4 flex justify-end">
               <Button variant="ghost" onClick={resetFilters}>Zrušit filtry</Button>
@@ -433,14 +523,13 @@ export default function Projects() {
               isAdmin={isAdmin}
               sortConfig={sortConfig}
               setSortConfig={setSortConfig}
+              costsByProjectId={costsByProjectId}
+              cnbRates={cnbRates}
             />
           )}
         </div>
 
-        {/* Budget Summary Table - only for admins */}
-        {isAdmin && (
-          <BudgetSummaryTable projects={sortedAndFilteredProjects} allCosts={allCosts} cnbRates={cnbRates} />
-        )}
+        {/* BudgetSummaryTable removed — costs are now shown in the main table */}
 
         {/* Project Form Dialog */}
         <Dialog open={showForm} onOpenChange={setShowForm}>

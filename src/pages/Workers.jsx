@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { Worker } from "@/entities/Worker";
 import { User } from "@/entities/User";
+import { isPrivileged } from "@/utils/roles";
 import { Assignment } from "@/entities/Assignment";
 import { Project } from "@/entities/Project";
 import { Button } from "@/components/ui/button";
@@ -28,6 +30,7 @@ const defaultFilters = {
 
 export default function WorkersPage() {
   const [workers, setWorkers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [projects, setProjects] = useState([]);
   const [user, setUser] = useState(null);
@@ -43,6 +46,7 @@ export default function WorkersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, workerId: null });
+  const location = useLocation();
 
   // The usePersistentState hook already handles reading from localStorage on initial render.
   // An additional useEffect for this purpose is redundant and has been removed.
@@ -50,13 +54,21 @@ export default function WorkersPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [workersData, userData, assignmentsData, projectsData] = await Promise.all([
+      const [workersData, userData, usersData, assignmentsData, projectsData] = await Promise.all([
         Worker.list("-created_date"),
         User.me().catch(() => null),
+        User.list().catch(() => []),
         Assignment.list(),
         Project.list()
       ]);
-      setWorkers(workersData);
+      // Exclude worker profiles that belong to admin/supervisor users (they're managed in Settings)
+      const privilegedWorkerIds = new Set(
+        usersData
+          .filter(u => isPrivileged(u) && u.worker_profile_id)
+          .map(u => u.worker_profile_id)
+      );
+      setWorkers(workersData.filter(w => !privilegedWorkerIds.has(w.id)));
+      setAllUsers(usersData);
       setUser(userData);
       setAssignments(assignmentsData);
       setProjects(projectsData);
@@ -112,6 +124,13 @@ export default function WorkersPage() {
     setIsDetailView(detail);
     setShowModal(true);
   };
+
+  useEffect(() => {
+    if (location.state?.openNewForm) {
+      openModal();
+      window.history.replaceState({}, '');
+    }
+  }, []);
 
   const closeModal = () => {
     setShowModal(false);
@@ -195,7 +214,7 @@ export default function WorkersPage() {
     });
   }, [ganttChartData.filteredWorkers, sortConfig]);
 
-  const isAdmin = user?.app_role === 'admin';
+  const isAdmin = isPrivileged(user);
 
   const resetFilters = () => {
     setSearchTerm("");
@@ -247,6 +266,7 @@ export default function WorkersPage() {
               setWorkerAvailabilityFilters={handleGanttAvailabilityFilterChange}
               projectStatusFilters={ganttProjectStatusFilters}
               setProjectStatusFilters={setGanttProjectStatusFilters}
+              isAdmin={isAdmin}
             />
           </CardContent>
         </Card>

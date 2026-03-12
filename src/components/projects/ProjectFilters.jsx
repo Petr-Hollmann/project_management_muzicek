@@ -2,7 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarIcon, X } from "lucide-react";
 import { format } from "date-fns";
 import { cs } from "date-fns/locale";
 import { MultiSelect } from "@/components/ui/MultiSelect";
@@ -46,37 +46,49 @@ export default function ProjectFilters({ filters, onFilterChange, availableStatu
     <>
       <div className="space-y-2">
         <Label className="text-sm font-medium text-slate-700">Datum zahájení</Label>
-        <Popover>
-          <PopoverTrigger asChild>
+        <div className="flex gap-1.5">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="flex-1 justify-start text-left font-normal h-10 min-w-0"
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
+                <span className="truncate">
+                  {safeFilters.dateRange.from ? (
+                    safeFilters.dateRange.to ? (
+                      `${format(safeFilters.dateRange.from, "d. L. y", { locale: cs })} – ${format(safeFilters.dateRange.to, "d. L. y", { locale: cs })}`
+                    ) : (
+                      format(safeFilters.dateRange.from, "d. L. y", { locale: cs })
+                    )
+                  ) : (
+                    <span className="text-slate-500">Vyberte rozmezí</span>
+                  )}
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={safeFilters.dateRange}
+                onSelect={handleDateChange}
+                locale={cs}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+          {safeFilters.dateRange.from && (
             <Button
               variant="outline"
-              className="w-full justify-start text-left font-normal h-10"
+              size="icon"
+              className="h-10 w-10 flex-shrink-0 text-slate-400 hover:text-slate-700"
+              onClick={() => handleDateChange(null)}
+              title="Zrušit datum"
             >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {safeFilters.dateRange.from ? (
-                safeFilters.dateRange.to ? (
-                  <>
-                    {format(safeFilters.dateRange.from, "d. L. y", { locale: cs })} -{" "}
-                    {format(safeFilters.dateRange.to, "d. L. y", { locale: cs })}
-                  </>
-                ) : (
-                  format(safeFilters.dateRange.from, "d. L. y", { locale: cs })
-                )
-              ) : (
-                <span className="text-slate-500">Vyberte rozmezí dat</span>
-              )}
+              <X className="h-4 w-4" />
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="range"
-              selected={safeFilters.dateRange}
-              onSelect={handleDateChange}
-              locale={cs}
-              initialFocus
-            />
-          </PopoverContent>
-        </Popover>
+          )}
+        </div>
       </div>
       
       <div className="space-y-2">

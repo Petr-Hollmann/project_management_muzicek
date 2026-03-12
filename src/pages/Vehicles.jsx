@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { Vehicle } from "@/entities/Vehicle";
 import { User } from "@/entities/User";
+import { isPrivileged } from "@/utils/roles";
 import { Assignment } from "@/entities/Assignment";
 import { Project } from "@/entities/Project";
 import { Button } from "@/components/ui/button";
@@ -43,6 +45,7 @@ export default function VehiclesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, vehicleId: null });
+  const location = useLocation();
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -103,6 +106,13 @@ export default function VehiclesPage() {
     setIsDetailView(detail);
     setShowModal(true);
   };
+
+  useEffect(() => {
+    if (location.state?.openNewForm) {
+      openModal();
+      window.history.replaceState({}, '');
+    }
+  }, []);
 
   const closeModal = () => {
     setShowModal(false);
@@ -249,7 +259,7 @@ export default function VehiclesPage() {
   }, [vehicles, searchTerm, filters, sortConfig, checkExpiring]);
 
 
-  const isAdmin = user?.app_role === 'admin';
+  const isAdmin = isPrivileged(user);
 
   const resetFilters = () => {
     setSearchTerm("");

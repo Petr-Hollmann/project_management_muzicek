@@ -1,9 +1,11 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Check, Edit, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cs } from 'date-fns/locale';
+import { createPageUrl } from '@/utils';
 
 const PRIORITY_LABELS = { low: 'Nízká', medium: 'Střední', high: 'Vysoká' };
 const PRIORITY_COLORS = {
@@ -47,6 +49,7 @@ export default function TaskList({
   hideProject = false,
   isAdmin = true,
   showCompletedBy = false,
+  showCreatedBy = false,
 }) {
   if (isLoading) {
     return <div className="text-center py-8 text-slate-500">Načítání úkolů...</div>;
@@ -96,6 +99,7 @@ export default function TaskList({
             <th className="pb-3 pr-4 font-medium">Úkol</th>
             {!hideProject && <th className="pb-3 pr-4 font-medium">Projekt</th>}
             <th className="pb-3 pr-4 font-medium">Přiřazeno</th>
+            {showCreatedBy && <th className="pb-3 pr-4 font-medium">Zadal/a</th>}
             <th className="pb-3 pr-4 font-medium">Termín</th>
             <th className="pb-3 pr-4 font-medium">Priorita</th>
             <th className="pb-3 pr-4 font-medium">Stav</th>
@@ -109,6 +113,10 @@ export default function TaskList({
             const assignee = task.assigned_to_user_id ? usersById[task.assigned_to_user_id] : null;
             const project = task.project_id ? projectsById[task.project_id] : null;
             const completedBy = task.completed_by_user_id ? usersById[task.completed_by_user_id] : null;
+            const createdBy = task.created_by_user_id ? usersById[task.created_by_user_id] : null;
+            const projectUrl = project
+              ? createPageUrl(isAdmin ? `ProjectDetail?id=${project.id}` : `InstallerProjectDetail?id=${project.id}`)
+              : null;
 
             return (
               <tr key={task.id} className="hover:bg-slate-50">
@@ -119,13 +127,20 @@ export default function TaskList({
                   )}
                 </td>
                 {!hideProject && (
-                  <td className="py-3 pr-4 text-slate-600 text-xs">
-                    {project ? project.name : <span className="text-slate-400">—</span>}
+                  <td className="py-3 pr-4 text-xs">
+                    {project && projectUrl
+                      ? <Link to={projectUrl} className="text-blue-600 hover:underline font-medium">{project.name}</Link>
+                      : <span className="text-slate-400">—</span>}
                   </td>
                 )}
                 <td className="py-3 pr-4 text-slate-600 text-xs">
                   {assignee ? (assignee.full_name || assignee.email) : <span className="text-slate-400">—</span>}
                 </td>
+                {showCreatedBy && (
+                  <td className="py-3 pr-4 text-slate-600 text-xs">
+                    {createdBy ? (createdBy.full_name || createdBy.email) : <span className="text-slate-400">—</span>}
+                  </td>
+                )}
                 <td className={`py-3 pr-4 text-xs font-medium ${overdue ? 'text-red-600' : 'text-slate-600'}`}>
                   {formatDate(task.due_date)}
                   {overdue && <span className="ml-1 text-red-500">!</span>}
