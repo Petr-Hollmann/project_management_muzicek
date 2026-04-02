@@ -13,8 +13,8 @@ const CORS_HEADERS = {
  *
  * Requires these Supabase secrets:
  *   - BREVO_API_KEY     — API key from Brevo (app.brevo.com → SMTP & API → API Keys)
- *   - NOTIFY_FROM_EMAIL — verified sender address in Brevo (e.g. "noreply@kevelyn.cz")
- *   - NOTIFY_FROM_NAME  — (optional) sender display name (e.g. "Kevelyn")
+ *   - NOTIFY_FROM_EMAIL — verified sender address in Brevo (e.g. "noreply@muzicek.cz")
+ *   - NOTIFY_FROM_NAME  — (optional) sender display name (e.g. "Muzicek")
  */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
 
     const brevoApiKey = Deno.env.get("BREVO_API_KEY");
     const fromEmail = Deno.env.get("NOTIFY_FROM_EMAIL") || "noreply@example.com";
-    const fromName = Deno.env.get("NOTIFY_FROM_NAME") || "Kevelyn";
+    const fromName = Deno.env.get("NOTIFY_FROM_NAME") || "Muzicek";
 
     if (!brevoApiKey) {
       console.error("BREVO_API_KEY not configured");

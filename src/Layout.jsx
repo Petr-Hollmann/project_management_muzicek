@@ -63,7 +63,8 @@ const settingsNav = [
   { title: "Nastavení", url: createPageUrl("Settings"), icon: Settings },
 ];
 
-const LOGO_URL = "https://qtrypzzcjebvfcihiynt.supabase.co/storage/v1/object/public/base44-prod/public/6866689686840507034f5142/2facbc0b7_logo_kevelyn_no_background.png";
+// TODO: Replace with Muzicek logo URL once Supabase storage is set up
+const LOGO_URL = "/logo_muzicek.png";
 
 const PendingApprovalScreen = () => (
   <div className="flex-1 flex items-center justify-center bg-slate-50 p-4">
@@ -191,7 +192,7 @@ export default function Layout({ children, currentPageName }) {
         <header className="bg-white border-b border-slate-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img src={LOGO_URL} alt="Kevelyn" className="w-10 h-10 object-contain" />
+              <img src={LOGO_URL} alt="Muzicek" className="w-10 h-10 object-contain" />
               <h2 className="font-bold text-slate-900 text-lg">Project Manager</h2>
             </div>
             <Button variant="ghost" size="sm" onClick={handleLogout} className="flex items-center gap-2">
@@ -215,7 +216,7 @@ export default function Layout({ children, currentPageName }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <img src={LOGO_URL} alt="Kevelyn" className="w-24 h-24 object-contain mx-auto mb-4" />
+          <img src={LOGO_URL} alt="Muzicek" className="w-24 h-24 object-contain mx-auto mb-4" />
           <p className="text-slate-600 font-medium">Načítání...</p>
         </div>
       </div>
@@ -247,7 +248,7 @@ export default function Layout({ children, currentPageName }) {
           {/* Expanded: logo + title + trigger */}
           <div className="flex items-center justify-between group-data-[collapsible=icon]:hidden">
             <div className="flex items-center gap-2.5 min-w-0">
-              <img src={LOGO_URL} alt="Kevelyn" className="w-9 h-9 object-contain flex-shrink-0" />
+              <img src={LOGO_URL} alt="Muzicek" className="w-9 h-9 object-contain flex-shrink-0" />
               <div className="min-w-0">
                 <h2 className="font-bold text-slate-900 text-base leading-tight truncate">Project Manager</h2>
                 <p className="text-xs text-slate-500 truncate">Řízení projektů a zdrojů</p>
@@ -400,7 +401,7 @@ export default function Layout({ children, currentPageName }) {
         {/* Mobile top bar — only shown on small screens */}
         <header className="md:hidden sticky top-0 z-30 bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 shadow-sm">
           <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-lg transition-colors" />
-          <img src={LOGO_URL} alt="Kevelyn" className="w-7 h-7 object-contain" />
+          <img src={LOGO_URL} alt="Muzicek" className="w-7 h-7 object-contain" />
           <span className="font-semibold text-slate-900 text-sm">Project Manager</span>
         </header>
 
