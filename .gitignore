@@ -31,3 +31,4 @@ scripts/migrate_base44.js
 *.sw?
 
 .env
+.vercel
