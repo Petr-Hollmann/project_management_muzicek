@@ -32,7 +32,7 @@ function getMondayOfWeek(d) {
 }
 
 const STATUS_LABEL = {
-  planned: 'Plánováno', confirmed: 'Potvrzeno', in_progress: 'Probíhá',
+  planned: 'HAHAHAA', confirmed: 'Potvrzeno', in_progress: 'Probíhá',
   completed: 'Dokončeno', archived: 'Archivováno',
 };
 const STATUS_CLS = {
