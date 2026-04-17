@@ -37,15 +37,19 @@ const AuthenticatedApp = () => {
 
   return (
     <Routes>
-      <Route path="/login" element={<Navigate to="/" replace />} />
-      <Route path="/" element={<LayoutWrapper currentPageName={mainPageKey}><MainPage /></LayoutWrapper>} />
-      {Object.entries(Pages).map(([path, Page]) => (
-        <Route
-          key={path}
-          path={`/${path}`}
-          element={<LayoutWrapper currentPageName={path}><Page /></LayoutWrapper>}
-        />
-      ))}
+      <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/dashboard" element={<LayoutWrapper currentPageName="Dashboard"><Pages.Dashboard /></LayoutWrapper>} />
+      <Route path="/orders" element={<LayoutWrapper currentPageName="Orders"><Pages.Orders /></LayoutWrapper>} />
+      <Route path="/orders/:id" element={<LayoutWrapper currentPageName="Orders"><Pages.OrderDetail /></LayoutWrapper>} />
+      <Route path="/calendar" element={<LayoutWrapper currentPageName="Calendar"><Pages.Calendar /></LayoutWrapper>} />
+      <Route path="/customers" element={<LayoutWrapper currentPageName="Customers"><Pages.Customers /></LayoutWrapper>} />
+      <Route path="/customers/:id" element={<LayoutWrapper currentPageName="Customers"><Pages.CustomerDetail /></LayoutWrapper>} />
+      <Route path="/vehicles" element={<LayoutWrapper currentPageName="Vehicles"><Pages.Vehicles /></LayoutWrapper>} />
+      <Route path="/vehicles/:id" element={<LayoutWrapper currentPageName="Vehicles"><Pages.VehicleDetail /></LayoutWrapper>} />
+      <Route path="/workers" element={<LayoutWrapper currentPageName="Workers"><Pages.Workers /></LayoutWrapper>} />
+      <Route path="/notes" element={<LayoutWrapper currentPageName="Notes"><Pages.Notes /></LayoutWrapper>} />
+      <Route path="/settings" element={<LayoutWrapper currentPageName="Settings"><Pages.Settings /></LayoutWrapper>} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

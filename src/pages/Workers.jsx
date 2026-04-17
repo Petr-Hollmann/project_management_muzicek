@@ -1,356 +1,464 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { useLocation } from "react-router-dom";
-import { Worker } from "@/entities/Worker";
-import { User } from "@/entities/User";
-import { isPrivileged } from "@/utils/roles";
-import { Assignment } from "@/entities/Assignment";
-import { Project } from "@/entities/Project";
-import { Button } from "@/components/ui/button";
-import { Plus, Users, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useToast } from "@/components/ui/use-toast";
-import { usePersistentState } from "@/components/hooks";
-import { Label } from "@/components/ui/label";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import React, { useEffect, useState, useMemo } from 'react';
+import { getWorkers, createWorker, updateWorker, deactivateWorker, reactivateWorker, deleteWorker } from '@/lib/api/workers';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { useToast } from '@/components/ui/use-toast';
+import { Plus, Pencil, Trash2, CheckCircle2, Search } from 'lucide-react';
 
-import GanttChart from "../components/dashboard/GanttChart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar } from "lucide-react";
 
-import WorkerForm from "../components/workers/WorkerForm";
-import WorkersTable from "../components/workers/WorkersTable";
-import WorkerFilters from "../components/workers/WorkerFilters";
-
-const defaultFilters = {
-  seniority: [],
-  specialization: [],
-  availability: [],
+const emptyForm = {
+  name: '',
+  phone: '',
+  email: '',
+  role: '',
+  categories: '',
+  is_active: true,
 };
 
 export default function WorkersPage() {
   const [workers, setWorkers] = useState([]);
-  const [allUsers, setAllUsers] = useState([]);
-  const [assignments, setAssignments] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [user, setUser] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [selectedWorker, setSelectedWorker] = useState(null);
-  const [isDetailView, setIsDetailView] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  
-  const [filters, setFilters] = usePersistentState('workerFilters', defaultFilters);
-
-  const [sortConfig, setSortConfig] = usePersistentState('workerSortConfig', { key: 'name', direction: 'asc' });
-  const [ganttProjectStatusFilters, setGanttProjectStatusFilters] = usePersistentState('workersGanttProjectStatusFilters', []); // New state for project status filters
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editWorker, setEditWorker] = useState(null);
+  const [form, setForm] = useState(emptyForm);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState({ open: false, workerId: null, name: '', action: 'deactivate' });
   const { toast } = useToast();
-  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, workerId: null });
-  const location = useLocation();
 
-  // The usePersistentState hook already handles reading from localStorage on initial render.
-  // An additional useEffect for this purpose is redundant and has been removed.
-
-  const loadData = useCallback(async () => {
+  const loadWorkers = async () => {
+    setError(null);
     setIsLoading(true);
     try {
-      const [workersData, userData, usersData, assignmentsData, projectsData] = await Promise.all([
-        Worker.list("-created_date"),
-        User.me().catch(() => null),
-        User.list().catch(() => []),
-        Assignment.list(),
-        Project.list()
-      ]);
-      // Exclude worker profiles that belong to admin/supervisor users (they're managed in Settings)
-      const privilegedWorkerIds = new Set(
-        usersData
-          .filter(u => isPrivileged(u) && u.worker_profile_id)
-          .map(u => u.worker_profile_id)
-      );
-      setWorkers(workersData.filter(w => !privilegedWorkerIds.has(w.id)));
-      setAllUsers(usersData);
-      setUser(userData);
-      setAssignments(assignmentsData);
-      setProjects(projectsData);
+      const data = await getWorkers();
+      setWorkers(data || []);
     } catch (error) {
-      console.error("Error loading data:", error);
-      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se načíst data." });
-    }
-    setIsLoading(false);
-  }, [toast]);
-
-  useEffect(() => {
-    // Tento useEffect zajišťuje, že se filtry načtou správně při navigaci z dashboardu.
-    const storedFilters = localStorage.getItem('workerFilters');
-    if (storedFilters) {
-      try {
-        const parsed = JSON.parse(storedFilters);
-        setFilters(parsed);
-      } catch (e) {
-        // If parsing fails, reset to default filters
-        setFilters(defaultFilters);
-      }
-    }
-  }, [setFilters]); // Changed: defaultFilters is a stable constant, no need to include
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const getSpecializations = useMemo(() => {
-    const allSpecs = workers.flatMap(w => w.specializations || []);
-    return [...new Set(allSpecs)];
-  }, [workers]);
-
-  const handleSubmit = async (workerData) => {
-    try {
-      if (selectedWorker && !isDetailView) {
-        await Worker.update(selectedWorker.id, workerData);
-        toast({ title: "Úspěch", description: "Montážník byl úspěšně aktualizován." });
-      } else {
-        await Worker.create(workerData);
-        toast({ title: "Úspěch", description: "Nový montážník byl vytvořen." });
-      }
-      closeModal();
-      loadData();
-    } catch (error) {
-      console.error("Error saving worker:", error);
-      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se uložit montážníka." });
+      console.error('Load workers error', error);
+      const msg = 'Nepodařilo se načíst zaměstnance.';
+      setError(msg);
+      toast({ variant: 'destructive', title: 'Chyba', description: msg });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const openModal = (worker = null, detail = false) => {
-    setSelectedWorker(worker);
-    setIsDetailView(detail);
-    setShowModal(true);
-  };
-
   useEffect(() => {
-    if (location.state?.openNewForm) {
-      openModal();
-      window.history.replaceState({}, '');
-    }
+    loadWorkers();
   }, []);
 
-  const closeModal = () => {
-    setShowModal(false);
-    setSelectedWorker(null);
-    setIsDetailView(false);
+  const openNew = () => {
+    setEditWorker(null);
+    setForm(emptyForm);
+    setDialogOpen(true);
   };
 
-  const handleDelete = async (workerId) => {
-    setDeleteConfirm({ open: true, workerId });
+  const openEdit = (worker) => {
+    setEditWorker(worker);
+    setForm({
+      name: worker.name || '',
+      phone: worker.phone || '',
+      email: worker.email || '',
+      role: worker.role || '',
+      categories: (worker.categories || []).join(', '),
+      is_active: worker.is_active ?? true,
+    });
+    setDialogOpen(true);
   };
 
-  const confirmDelete = async () => {
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditWorker(null);
+    setForm(emptyForm);
+  };
+
+  const submitForm = async (evt) => {
+    evt.preventDefault();
+    if (!form.name.trim()) {
+      toast({ variant: 'destructive', title: 'Chyba', description: 'Jméno je povinné.' });
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    const payload = {
+      name: form.name.trim(),
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      role: form.role.trim() || null,
+      categories: form.categories
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean),
+      is_active: !!form.is_active,
+    };
+
     try {
-      await Worker.delete(deleteConfirm.workerId);
-      toast({ title: "Úspěch", description: "Montážník byl smazán." });
-      setDeleteConfirm({ open: false, workerId: null }); // Close dialog and reset state
-      loadData();
+      if (editWorker) {
+        await updateWorker(editWorker.id, payload);
+        toast({ title: 'Úspěch', description: 'Zaměstnanec byl upraven.' });
+      } else {
+        await createWorker(payload);
+        toast({ title: 'Úspěch', description: 'Zaměstnanec byl přidán.' });
+      }
+      closeDialog();
+      await loadWorkers();
     } catch (error) {
-      console.error("Error deleting worker:", error);
-      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se smazat montážníka." });
+      console.error('Save worker error', error);
+      const msg = 'Uložení zaměstnance selhalo.';
+      setError(msg);
+      toast({ variant: 'destructive', title: 'Chyba', description: msg });
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const availableOptions = useMemo(() => {
-    const searchFiltered = workers.filter(worker => {
-      const fullName = `${worker.first_name || ''} ${worker.last_name || ''}`.toLowerCase();
-      return fullName.includes(searchTerm.toLowerCase());
-    });
-
-    const seniorityFiltered = searchFiltered.filter(w =>
-        (filters.specialization.length === 0 || filters.specialization.every(spec => (w.specializations || []).includes(spec))) &&
-        (filters.availability.length === 0 || filters.availability.includes(w.availability))
-    );
-    const availableSeniorities = new Set(seniorityFiltered.map(w => w.seniority));
-
-    const specializationFiltered = searchFiltered.filter(w =>
-        (filters.seniority.length === 0 || filters.seniority.includes(w.seniority)) &&
-        (filters.availability.length === 0 || filters.availability.includes(w.availability))
-    );
-    const availableSpecializations = new Set(specializationFiltered.flatMap(w => w.specializations || []));
-
-    const availabilityFiltered = searchFiltered.filter(w =>
-        (filters.seniority.length === 0 || filters.seniority.includes(w.seniority)) &&
-        (filters.specialization.length === 0 || filters.specialization.every(spec => (w.specializations || []).includes(spec)))
-    );
-    const availableAvailabilities = new Set(availabilityFiltered.map(w => w.availability));
-
-    return { availableSeniorities, availableSpecializations, availableAvailabilities };
-  }, [workers, searchTerm, filters]);
-
-  // Callback to sync availability filter from Gantt to main filters
-  const handleGanttAvailabilityFilterChange = (newAvailabilityFilters) => {
-    setFilters(prev => ({ ...prev, availability: newAvailabilityFilters }));
+  const handleDeleteClick = (worker) => {
+    setConfirmDelete({ open: true, workerId: worker.id, name: worker.name, action: 'deactivate' });
   };
 
-  const ganttChartData = useMemo(() => {
-    const filteredWorkersForGantt = workers.filter(worker => {
-      const fullName = `${worker.first_name || ''} ${worker.last_name || ''}`.toLowerCase();
-      const matchesSearch = fullName.includes(searchTerm.toLowerCase());
-      const matchesSeniority = filters.seniority.length === 0 || filters.seniority.includes(worker.seniority);
-      const matchesAvailability = filters.availability.length === 0 || filters.availability.includes(worker.availability);
-      const workerSpecs = new Set(worker.specializations || []);
-      const matchesSpecialization = filters.specialization.length === 0 || filters.specialization.every(spec => workerSpecs.has(spec));
-      return matchesSearch && matchesSeniority && matchesAvailability && matchesSpecialization;
-    });
+  const handleReactivateClick = (worker) => {
+    setConfirmDelete({ open: true, workerId: worker.id, name: worker.name, action: 'reactivate' });
+  };
 
-    const filteredWorkerIds = new Set(filteredWorkersForGantt.map(w => w.id));
-    const filteredAssignments = assignments.filter(a => a.worker_id && filteredWorkerIds.has(a.worker_id));
+  const handlePermanentDeleteClick = (worker) => {
+    setConfirmDelete({ open: true, workerId: worker.id, name: worker.name, action: 'delete' });
+  };
 
-    return { filteredWorkers: filteredWorkersForGantt, filteredAssignments };
-  }, [workers, assignments, searchTerm, filters]);
+  const handleConfirmDelete = async () => {
+    const { workerId, action } = confirmDelete;
+    const previousWorkers = workers;
+    
+    setConfirmDelete({ open: false, workerId: null, name: '', action: 'deactivate' });
+    setError(null);
+
+    try {
+      if (action === 'deactivate') {
+        setWorkers((prev) => prev.map((w) => w.id === workerId ? { ...w, is_active: false } : w));
+        await deactivateWorker(workerId);
+        toast({ title: 'Úspěch', description: 'Zaměstnanec byl deaktivován.' });
+      } else if (action === 'reactivate') {
+        setWorkers((prev) => prev.map((w) => w.id === workerId ? { ...w, is_active: true } : w));
+        await reactivateWorker(workerId);
+        toast({ title: 'Úspěch', description: 'Zaměstnanec byl znovuaktivován.' });
+      } else if (action === 'delete') {
+        setWorkers((prev) => prev.filter((w) => w.id !== workerId));
+        await deleteWorker(workerId);
+        toast({ title: 'Úspěch', description: 'Zaměstnanec byl trvale smazán.' });
+      }
+      await loadWorkers();
+    } catch (error) {
+      console.error(`Action ${action} failed:`, error);
+      setWorkers(previousWorkers);
+      const msg = action === 'deactivate' ? 'Deaktivace selhala.' : action === 'reactivate' ? 'Aktivace selhala.' : 'Smazání selhalo.';
+      setError(msg);
+      toast({ variant: 'destructive', title: 'Chyba', description: msg });
+    }
+  };
 
   const filteredWorkers = useMemo(() => {
-    // This logic is the same as for the gantt chart, just with added sorting for the table.
-    return ganttChartData.filteredWorkers.sort((a, b) => {
-      const nameA = `${a.first_name || ''} ${a.last_name || ''}`.trim();
-      const nameB = `${b.first_name || ''} ${b.last_name || ''}`.trim();
-      return sortConfig.direction === 'asc'
-        ? nameA.localeCompare(nameB, 'cs', { sensitivity: 'base' })
-        : nameB.localeCompare(nameA, 'cs', { sensitivity: 'base' });
+    return workers.filter((w) => {
+      const searchLower = searchTerm.toLowerCase();
+      return (
+        w.name.toLowerCase().includes(searchLower) ||
+        (w.email && w.email.toLowerCase().includes(searchLower)) ||
+        (w.phone && w.phone.includes(searchTerm))
+      );
     });
-  }, [ganttChartData.filteredWorkers, sortConfig]);
+  }, [workers, searchTerm]);
 
-  const isAdmin = isPrivileged(user);
-
-  const resetFilters = () => {
-    setSearchTerm("");
-    setFilters(defaultFilters);
-  };
-
-  const areFiltersActive = useMemo(() => {
-    return searchTerm !== "" ||
-           filters.seniority.length > 0 ||
-           filters.specialization.length > 0 ||
-           filters.availability.length > 0;
-  }, [searchTerm, filters]);
+  const activeWorkers = useMemo(() => filteredWorkers.filter((w) => w.is_active), [filteredWorkers]);
 
   return (
-    <div className="p-4 md:p-8 bg-slate-50 min-h-screen">
+    <div className="p-4 md:p-6 bg-slate-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div className="flex items-center justify-between gap-4 mb-5">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">Montážníci</h1>
-            <p className="text-slate-600">Správa a přehled všech montážníků</p>
+            <h1 className="text-xl md:text-2xl font-bold text-slate-900">Zaměstnanci</h1>
+            <p className="text-sm text-slate-600">Správa zaměstnanců a jejich stavu.</p>
           </div>
-          {isAdmin && (
-            <Button onClick={() => openModal()} className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Přidat montážníka
-            </Button>
-          )}
+          <Button onClick={openNew} className="bg-blue-600 hover:bg-blue-700 min-h-[44px]">
+            <Plus className="w-4 h-4 md:mr-2" />
+            <span className="hidden md:inline">Přidat zaměstnance</span>
+          </Button>
         </div>
 
-        {/* Gantt Chart */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
-              Vytížení montážníků
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <GanttChart
-              view="workers"
-              projects={projects}
-              workers={ganttChartData.filteredWorkers}
-              vehicles={[]}
-              assignments={ganttChartData.filteredAssignments}
-              isLoading={isLoading}
-              sortConfig={sortConfig}
-              setSortConfig={setSortConfig}
-              workerAvailabilityFilters={filters.availability}
-              setWorkerAvailabilityFilters={handleGanttAvailabilityFilterChange}
-              projectStatusFilters={ganttProjectStatusFilters}
-              setProjectStatusFilters={setGanttProjectStatusFilters}
-              isAdmin={isAdmin}
-            />
+        {error && (
+          <div role="alert" className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <Card className="mb-4">
+          <CardContent className="pt-4 pb-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="Hledat jménem, emailem nebo telefonem..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 min-h-[44px]"
+              />
+            </div>
           </CardContent>
         </Card>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-slate-700">Hledat</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Hledat montážníky..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+        {isLoading ? (
+          <div className="p-4 text-sm text-slate-500 text-center">Načítání...</div>
+        ) : filteredWorkers.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">Žádní zaměstnanci nenalezeni</div>
+        ) : (
+          <>
+            {/* Mobile: card list */}
+            <div className="md:hidden space-y-2">
+              {filteredWorkers.map((worker) => (
+                <div key={worker.id} className="bg-white rounded-xl border border-slate-200 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-slate-900">{worker.name}</span>
+                        {worker.is_active ? (
+                          <span className="inline-flex items-center gap-1 text-xs rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">
+                            <CheckCircle2 className="w-3 h-3" /> Aktivní
+                          </span>
+                        ) : (
+                          <span className="text-xs rounded-full bg-slate-200 text-slate-600 px-2 py-0.5">Neaktivní</span>
+                        )}
+                      </div>
+                      {worker.role && <p className="text-sm text-slate-500 mt-0.5">{worker.role}</p>}
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                        {worker.phone && <span className="text-sm text-slate-600">{worker.phone}</span>}
+                        {worker.email && <span className="text-sm text-slate-500 truncate">{worker.email}</span>}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Button variant="ghost" size="sm" className="min-h-[44px] min-w-[44px]" onClick={() => openEdit(worker)} disabled={isSaving}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      {worker.is_active ? (
+                        <Button variant="ghost" size="sm" className="text-red-600 min-h-[44px] min-w-[44px]" onClick={() => handleDeleteClick(worker)} disabled={isSaving}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      ) : (
+                        <>
+                          <Button variant="ghost" size="sm" className="text-green-600 min-h-[44px] min-w-[44px]" onClick={() => handleReactivateClick(worker)} disabled={isSaving}>
+                            <CheckCircle2 className="w-4 h-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="text-red-600 min-h-[44px] min-w-[44px]" onClick={() => handlePermanentDeleteClick(worker)} disabled={isSaving}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <WorkerFilters
-              filters={filters}
-              onFilterChange={setFilters}
-              specializations={getSpecializations}
-              availableOptions={availableOptions}
-            />
-          </div>
-           {areFiltersActive && (
-            <div className="mt-4 flex justify-end">
-              <Button variant="ghost" onClick={resetFilters}>Zrušit filtry</Button>
-            </div>
-          )}
-        </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-          {isLoading ? (
-            <div className="text-center py-12">Načítání dat...</div>
-          ) : filteredWorkers.length === 0 ? (
-            <div className="col-span-full text-center py-12">
-              <Users className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-              <h3 className="text-lg font-medium text-slate-900 mb-2">Žádní montážníci nenalezeni</h3>
-              <p className="text-slate-600 mb-4">Zkuste změnit filtry nebo přidejte nového montážníka.</p>
-            </div>
-          ) : (
-            <WorkersTable
-              workers={filteredWorkers}
-              onEdit={(worker) => openModal(worker, false)}
-              onDelete={handleDelete}
-              onViewDetail={(worker) => openModal(worker, true)}
-              isAdmin={isAdmin}
-            />
-          )}
-        </div>
-
-        <Dialog open={showModal} onOpenChange={setShowModal}>
-          <DialogContent className="max-w-[95vw] sm:max-w-3xl mx-auto max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {isDetailView ? `Detail montážníka: ${selectedWorker?.first_name} ${selectedWorker?.last_name}` : (selectedWorker ? "Upravit montážníka" : "Nový montážník")}
-              </DialogTitle>
-            </DialogHeader>
-            <WorkerForm
-              worker={selectedWorker}
-              assignments={assignments}
-              projects={projects}
-              isDetailView={isDetailView}
-              onSubmit={handleSubmit}
-              onCancel={closeModal}
-              isAdmin={isAdmin}
-              allWorkers={workers}
-            />
-          </DialogContent>
-        </Dialog>
+            {/* Desktop: table */}
+            <Card className="hidden md:block">
+              <CardHeader>
+                <CardTitle>Seznam zaměstnanců ({activeWorkers.length} aktivních)</CardTitle>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b border-slate-200 bg-slate-50">
+                      <th className="py-3 pl-3 pr-2 font-medium">Jméno</th>
+                      <th className="py-3 px-2 font-medium">Telefon</th>
+                      <th className="py-3 px-2 font-medium">Email</th>
+                      <th className="py-3 px-2 font-medium">Role</th>
+                      <th className="py-3 px-2 font-medium">Kategorie</th>
+                      <th className="py-3 px-2 font-medium">Stav</th>
+                      <th className="py-3 pr-3 pl-2 font-medium text-right">Akce</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredWorkers.map((worker) => (
+                      <tr key={worker.id} className="border-b border-slate-100 hover:bg-blue-50 transition-colors">
+                        <td className="py-3 pl-3 pr-2 text-slate-900 font-medium">{worker.name}</td>
+                        <td className="py-3 px-2 text-slate-700">{worker.phone || '–'}</td>
+                        <td className="py-3 px-2 text-slate-700">{worker.email || '–'}</td>
+                        <td className="py-3 px-2 text-slate-700">{worker.role || '–'}</td>
+                        <td className="py-3 px-2 text-slate-700">
+                          {worker.categories?.length > 0 ? worker.categories.join(', ') : '–'}
+                        </td>
+                        <td className="py-3 px-2">
+                          {worker.is_active ? (
+                            <span className="inline-flex items-center gap-1 text-xs rounded-full bg-emerald-100 text-emerald-700 px-2.5 py-1">
+                              <CheckCircle2 className="w-3 h-3" /> Aktivní
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs rounded-full bg-slate-200 text-slate-600 px-2.5 py-1">Neaktivní</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-3 pl-2 text-right space-x-1">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(worker)} disabled={isSaving}>
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          {worker.is_active ? (
+                            <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleDeleteClick(worker)} disabled={isSaving}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="sm" className="text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => handleReactivateClick(worker)} disabled={isSaving}>
+                                <CheckCircle2 className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handlePermanentDeleteClick(worker)} disabled={isSaving}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
-      {/* Confirm Delete Dialog */}
-      <ConfirmDialog
-        open={deleteConfirm.open}
-        onOpenChange={(open) => setDeleteConfirm({ open, workerId: null })}
-        title="Smazat montážníka?"
-        description="Opravdu chcete smazat tohoto montážníka? Tuto akci nelze vzít zpět."
-        onConfirm={confirmDelete}
-        confirmText="Smazat"
-        cancelText="Zrušit"
-        variant="destructive"
-      />
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editWorker ? 'Upravit zaměstnance' : 'Přidat zaměstnance'}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={submitForm} className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="name">Jméno *</Label>
+              <Input
+                id="name"
+                value={form.name}
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                required
+                disabled={isSaving}
+              />
+            </div>
+            <div>
+              <Label htmlFor="phone">Telefon</Label>
+              <Input
+                id="phone"
+                value={form.phone}
+                onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+                disabled={isSaving}
+              />
+            </div>
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                disabled={isSaving}
+              />
+            </div>
+            <div>
+              <Label htmlFor="role">Role</Label>
+              <Input
+                id="role"
+                value={form.role}
+                onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value }))}
+                disabled={isSaving}
+              />
+            </div>
+            <div>
+              <Label htmlFor="categories">Kategorie (čárkou oddělené)</Label>
+              <Input
+                id="categories"
+                value={form.categories}
+                onChange={(e) => setForm((prev) => ({ ...prev, categories: e.target.value }))}
+                placeholder="např. instalace, servis, polepování"
+                disabled={isSaving}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="active"
+                checked={form.is_active}
+                onCheckedChange={(checked) =>
+                  setForm((prev) => ({ ...prev, is_active: checked }))
+                }
+                disabled={isSaving}
+              />
+              <Label htmlFor="active">Aktivní</Label>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeDialog}
+                disabled={isSaving}
+              >
+                Zrušit
+              </Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? 'Ukládá se...' : 'Uložit'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmDelete.open} onOpenChange={(open) => {
+        if (!open) setConfirmDelete({ open: false, workerId: null, name: '', action: 'deactivate' });
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {confirmDelete.action === 'deactivate' && 'Deaktivovat zaměstnance?'}
+              {confirmDelete.action === 'reactivate' && 'Aktivovat zaměstnance?'}
+              {confirmDelete.action === 'delete' && 'Smazat zaměstnance trvale?'}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-slate-700">
+            {confirmDelete.action === 'deactivate' && (
+              <>Opravdu chcete deaktivovat zaměstnance <strong>{confirmDelete.name}</strong>? Bude stále viditelný v historii, ale nebude již dostupný pro nové úkoly.</>
+            )}
+            {confirmDelete.action === 'reactivate' && (
+              <>Opravdu chcete aktivovat zaměstnance <strong>{confirmDelete.name}</strong>? Bude opět dostupný pro přiřazení k úkolům.</>
+            )}
+            {confirmDelete.action === 'delete' && (
+              <>Opravdu chcete <strong>trvale smazat</strong> zaměstnance <strong>{confirmDelete.name}</strong>? Tuto akci nelze vrátit zpět a všechny údaje budou ztraceny.</>
+            )}
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDelete({ open: false, workerId: null, name: '', action: 'deactivate' })}
+              disabled={isSaving}
+            >
+              Zrušit
+            </Button>
+            <Button
+              variant={confirmDelete.action === 'delete' ? 'destructive' : 'default'}
+              onClick={handleConfirmDelete}
+              disabled={isSaving}
+            >
+              {isSaving && confirmDelete.action === 'deactivate' && 'Deaktivuje se...'}
+              {isSaving && confirmDelete.action === 'reactivate' && 'Aktivuje se...'}
+              {isSaving && confirmDelete.action === 'delete' && 'Maže se...'}
+              {!isSaving && confirmDelete.action === 'deactivate' && 'Deaktivovat'}
+              {!isSaving && confirmDelete.action === 'reactivate' && 'Aktivovat'}
+              {!isSaving && confirmDelete.action === 'delete' && 'Smazat trvale'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

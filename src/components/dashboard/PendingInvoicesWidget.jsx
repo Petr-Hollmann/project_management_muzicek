@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Invoice } from '@/entities/Invoice';
-import { Project } from '@/entities/Project';
+import { Order } from '@/entities/Order';
 import { Worker } from '@/entities/Worker';
 import { User } from '@/entities/User';
 import { isPrivileged } from '@/utils/roles';
@@ -36,14 +35,13 @@ export default function PendingInvoicesWidget() {
         return;
       }
 
-      const [invoicesData, projectsData, workersData] = await Promise.all([
-        Invoice.filter({ status: 'pending_approval' }, '-issue_date'),
-        Project.list(),
+      const [ordersData, workersData] = await Promise.all([
+        Order.filter({ is_invoiced: false }, '-created_at'),
         Worker.list()
       ]);
 
-      setPendingInvoices(invoicesData);
-      setProjects(projectsData.reduce((acc, p) => ({ ...acc, [p.id]: p }), {}));
+      setPendingInvoices(ordersData);
+      setProjects({});
       setWorkers(workersData.reduce((acc, w) => ({ ...acc, [w.id]: w }), {}));
     } catch (error) {
       console.error('Error loading pending invoices:', error);
@@ -51,26 +49,26 @@ export default function PendingInvoicesWidget() {
     setIsLoading(false);
   };
 
-  const handleApprove = async (invoiceId) => {
+  const handleApprove = async (orderId) => {
     try {
-      await Invoice.update(invoiceId, { status: 'approved' });
-      toast({ title: 'Schváleno', description: 'Objednávka byla schválena.' });
+      await Order.update(orderId, { is_invoiced: true, is_paid: true });
+      toast({ title: 'Schváleno', description: 'Zakázka byla označena jako vyfakturovaná.' });
       loadData();
     } catch (error) {
-      toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se schválit objednávku.' });
+      toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se aktualizovat zakázku.' });
     }
   };
 
-  const handleReject = async (invoiceId) => {
-    const reason = prompt('Zadejte důvod zamítnutí:');
+  const handleReject = async (orderId) => {
+    const reason = prompt('Zadejte důvod zrušení:');
     if (!reason) return;
 
     try {
-      await Invoice.update(invoiceId, { status: 'rejected', rejection_reason: reason });
-      toast({ title: 'Zamítnuto', description: 'Objednávka byla zamítnuta.' });
+      await Order.update(orderId, { status: 'archived', internal_notes: `${(order.internal_notes||'')}\nZamítnuto: ${reason}` });
+      toast({ title: 'Zamítnuto', description: 'Zakázka byla archivována.' });
       loadData();
     } catch (error) {
-      toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se zamítnout objednávku.' });
+      toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se archivovat zakázku.' });
     }
   };
 
@@ -109,41 +107,41 @@ export default function PendingInvoicesWidget() {
           </div>
         ) : (
           <div className="space-y-3">
-            {pendingInvoices.slice(0, 3).map((invoice) => {
-              const project = projects[invoice.project_id];
-              const worker = workers[invoice.worker_id];
+            {pendingInvoices.slice(0, 3).map((order) => {
+              const worker = workers[order.created_by];
 
               return (
-                <div key={invoice.id} className="p-3 border rounded-lg hover:bg-slate-50 transition-colors">
+                <div key={order.id} className="p-3 border rounded-lg hover:bg-slate-50 transition-colors">
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="font-semibold text-slate-900">č. {invoice.invoice_number}</p>
+                        <p className="font-semibold text-slate-900">č. {order.name || order.order_number || order.id}</p>
                         <p className="text-sm text-slate-600 truncate">
                           {worker ? `${worker.first_name} ${worker.last_name}` : 'Neznámý montážník'}
                         </p>
                       </div>
-                      <p className="text-sm text-slate-600 truncate" title={project?.name}>
-                        {project?.name || 'Neznámý projekt'}
+                      <p className="text-sm text-slate-600 truncate" title={order.customer_notes || 'Zakázka'}>
+                        {order.customer_notes ? order.customer_notes.slice(0, 40) : 'Bez poznámky'}
                       </p>
                       <p className="text-xs text-slate-400">
-                        {format(new Date(invoice.issue_date), 'd.M.yyyy', { locale: cs })}
+                        {order.created_at ? format(new Date(order.created_at), 'd.M.yyyy', { locale: cs }) : '-'}
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
                       <p className="font-bold text-green-600 whitespace-nowrap">
-                        {invoice.total_with_vat?.toLocaleString('cs-CZ')} Kč
+                        {order.total_price?.toLocaleString('cs-CZ') || '0'} Kč
                       </p>
                     </div>
                   </div>
                   
                   <div className="flex items-center gap-1 mt-2">
-                    {invoice.pdf_url && (
+                    {order.is_invoiced === false && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDownload(invoice)}
-                        title="Stáhnout PDF"
+                        onClick={() => handleApprove(order.id)}
+                        className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                        title="Označit jako vyfakturováno"
                       >
                         <Download className="w-4 h-4" />
                       </Button>

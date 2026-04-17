@@ -2,15 +2,16 @@ import { BaseEntity } from './BaseEntity';
 
 class TaskEntity extends BaseEntity {
   constructor() {
-    super('task');
+    // Checklist (zakázka -> checklist_item) je nový zdroj úkolů pro výrobu
+    super('checklist_item');
   }
 
-  async filterByUser(userId, sortBy = 'due_date') {
-    return this.filter({ assigned_to_user_id: userId }, sortBy);
+  async filterByUser(userId, sortBy = 'completed_at') {
+    return this.filter({ assigned_to: userId }, sortBy);
   }
 
-  async filterByProject(projectId, sortBy = 'due_date') {
-    return this.filter({ project_id: projectId }, sortBy);
+  async filterByProject(orderId, sortBy = 'completed_at') {
+    return this.filter({ order_id: orderId }, sortBy);
   }
 }
 

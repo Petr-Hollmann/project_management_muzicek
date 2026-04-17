@@ -1,2 +1,3 @@
 import { BaseEntity } from './BaseEntity';
-export const Assignment = new BaseEntity('assignment');
+// Přiřazení montážníka k zakázce
+export const Assignment = new BaseEntity('order_worker');

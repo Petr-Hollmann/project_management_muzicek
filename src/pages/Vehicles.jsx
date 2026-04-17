@@ -1,398 +1,196 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { useLocation } from "react-router-dom";
-import { Vehicle } from "@/entities/Vehicle";
-import { User } from "@/entities/User";
-import { isPrivileged } from "@/utils/roles";
-import { Assignment } from "@/entities/Assignment";
-import { Project } from "@/entities/Project";
-import { Button } from "@/components/ui/button";
-import { Plus, Car, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useToast } from "@/components/ui/use-toast";
-import { usePersistentState } from "@/components/hooks";
-import { Label } from "@/components/ui/label";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getAllVehiclesWithCustomer, getTkStatus, getTkColor } from '@/lib/api/vehicles';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/components/ui/use-toast';
+import { Search, User, Car } from 'lucide-react';
 
-import VehicleForm from "../components/vehicles/VehicleForm";
-import VehiclesTable from "../components/vehicles/VehiclesTable";
-import VehicleFilters from "../components/vehicles/VehicleFilters";
-
-import GanttChart from "../components/dashboard/GanttChart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar } from "lucide-react";
-
-const defaultFilters = {
-  type: [],
-  status: [],
-  expiring: [],
-};
+function TkBadge({ tkExpiry }) {
+  const status = getTkStatus(tkExpiry);
+  const labels = { expired: 'Propadlá', critical: 'Do 30 dní', warning: 'Do 60 dní', ok: 'OK', unknown: '–' };
+  const variants = {
+    expired: 'bg-red-100 text-red-700 border-red-300',
+    critical: 'bg-red-100 text-red-700 border-red-300',
+    warning: 'bg-orange-100 text-orange-700 border-orange-300',
+    ok: 'bg-green-100 text-green-700 border-green-300',
+    unknown: 'bg-slate-100 text-slate-500 border-slate-200',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${variants[status]}`}>
+      {tkExpiry ? `${tkExpiry} (${labels[status]})` : labels[status]}
+    </span>
+  );
+}
 
 export default function VehiclesPage() {
   const [vehicles, setVehicles] = useState([]);
-  const [assignments, setAssignments] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [user, setUser] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [selectedVehicle, setSelectedVehicle] = useState(null);
-  const [isDetailView, setIsDetailView] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  
-  const [filters, setFilters] = usePersistentState('vehicleFilters', defaultFilters);
-
-  const [sortConfig, setSortConfig] = usePersistentState('vehicleSortConfig', { key: 'name', direction: 'asc' });
-  const [ganttProjectStatusFilters, setGanttProjectStatusFilters] = usePersistentState('vehiclesGanttProjectStatusFilters', []);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
-  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, vehicleId: null });
-  const location = useLocation();
-
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [vehiclesData, userData, assignmentsData, projectsData] = await Promise.all([
-        Vehicle.list("-created_date"),
-        User.me().catch(() => null),
-        Assignment.list(),
-        Project.list()
-      ]);
-      setVehicles(vehiclesData);
-      setUser(userData);
-      setAssignments(assignmentsData);
-      setProjects(projectsData);
-    } catch (error) {
-      console.error("Error loading data:", error);
-      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se načíst data." });
-    }
-    setIsLoading(false);
-  }, [toast]);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    // Tento useEffect zajišťuje, že se filtry načtou správně při navigaci z dashboardu.
-    const storedFilters = localStorage.getItem('vehicleFilters');
-    if (storedFilters) {
+    const load = async () => {
+      setIsLoading(true);
+      setError(null);
       try {
-        const parsed = JSON.parse(storedFilters);
-        setFilters(parsed);
-      } catch (e) {
-        setFilters(defaultFilters);
+        const data = await getAllVehiclesWithCustomer();
+        setVehicles(data || []);
+      } catch (err) {
+        console.error('Load vehicles error', err);
+        const msg = 'Nepodařilo se načíst vozidla.';
+        setError(msg);
+        toast({ variant: 'destructive', title: 'Chyba', description: msg });
+      } finally {
+        setIsLoading(false);
       }
-    }
-  }, [setFilters, defaultFilters]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const handleSubmit = async (vehicleData) => {
-    try {
-      if (selectedVehicle && !isDetailView) {
-        await Vehicle.update(selectedVehicle.id, vehicleData);
-        toast({ title: "Úspěch", description: "Vozidlo bylo úspěšně aktualizováno." });
-      } else {
-        await Vehicle.create(vehicleData);
-        toast({ title: "Úspěch", description: "Nové vozidlo bylo vytvořeno." });
-      }
-      closeModal();
-      loadData();
-    } catch (error) {
-      console.error("Error saving vehicle:", error);
-      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se uložit vozidlo." });
-    }
-  };
-
-  const openModal = (vehicle = null, detail = false) => {
-    setSelectedVehicle(vehicle);
-    setIsDetailView(detail);
-    setShowModal(true);
-  };
-
-  useEffect(() => {
-    if (location.state?.openNewForm) {
-      openModal();
-      window.history.replaceState({}, '');
-    }
+    };
+    load();
   }, []);
 
-  const closeModal = () => {
-    setShowModal(false);
-    setSelectedVehicle(null);
-    setIsDetailView(false);
-  };
-
-  const handleDelete = async (vehicleId) => {
-    setDeleteConfirm({ open: true, vehicleId });
-  };
-
-  const confirmDelete = async () => {
-    try {
-      await Vehicle.delete(deleteConfirm.vehicleId);
-      toast({ title: "Úspěch", description: "Vozidlo bylo smazáno." });
-      setDeleteConfirm({ open: false, vehicleId: null }); // Close dialog after successful delete
-      loadData();
-    } catch (error) {
-      console.error("Error deleting vehicle:", error);
-      toast({ variant: "destructive", title: "Chyba", description: "Nepodařilo se smazat vozidlo." });
-    }
-  };
-
-  const checkExpiring = useCallback((vehicle) => {
-    const now = new Date();
-    const warningDate = new Date();
-    warningDate.setDate(warningDate.getDate() + 30);
-
-    const dates = [
-      vehicle.stk_expiry,
-      vehicle.insurance_expiry,
-      vehicle.highway_sticker_expiry
-    ].filter(Boolean);
-
-    return dates.some(date => {
-      if (!date) return false;
-      const expiry = new Date(date);
-      return expiry <= warningDate && expiry >= now;
-    });
-  }, []);
-
-  const availableOptions = useMemo(() => {
-    const searchFiltered = vehicles.filter(v =>
-        v.license_plate.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.brand_model.toLowerCase().includes(searchTerm.toLowerCase())
+  const filtered = useMemo(() => {
+    const q = searchTerm.toLowerCase();
+    if (!q) return vehicles;
+    return vehicles.filter((v) =>
+      (v.spz && v.spz.toLowerCase().includes(q)) ||
+      (v.brand && v.brand.toLowerCase().includes(q)) ||
+      (v.model && v.model.toLowerCase().includes(q)) ||
+      (v.vin && v.vin.toLowerCase().includes(q)) ||
+      (v.customer?.name && v.customer.name.toLowerCase().includes(q))
     );
-
-    const typeFiltered = searchFiltered.filter(v => {
-        const matchesStatus = filters.status.length === 0 || filters.status.includes(v.status);
-        const hasExpiring = checkExpiring(v);
-        const matchesExpiring = filters.expiring.length === 0 ||
-                                (filters.expiring.includes("expiring") && hasExpiring) ||
-                                (filters.expiring.includes("not_expiring") && !hasExpiring);
-        return matchesStatus && matchesExpiring;
-    });
-    const availableTypes = new Set(typeFiltered.map(v => v.vehicle_type));
-
-    const statusFiltered = searchFiltered.filter(v => {
-        const matchesType = filters.type.length === 0 || filters.type.includes(v.vehicle_type);
-        const hasExpiring = checkExpiring(v);
-        const matchesExpiring = filters.expiring.length === 0 ||
-                                (filters.expiring.includes("expiring") && hasExpiring) ||
-                                (filters.expiring.includes("not_expiring") && !hasExpiring);
-        return matchesType && matchesExpiring;
-    });
-    const availableStatuses = new Set(statusFiltered.map(v => v.status));
-
-    const expiringFiltered = searchFiltered.filter(v => {
-        const matchesType = filters.type.length === 0 || filters.type.includes(v.vehicle_type);
-        const matchesStatus = filters.status.length === 0 || filters.status.includes(v.status);
-        return matchesType && matchesStatus;
-    });
-    const availableExpiring = new Set();
-    expiringFiltered.forEach(v => {
-        if (checkExpiring(v)) {
-            availableExpiring.add('expiring');
-        } else {
-            availableExpiring.add('not_expiring');
-        }
-    });
-
-    return { availableTypes, availableStatuses, availableExpiring };
-  }, [vehicles, searchTerm, filters, checkExpiring]); 
-
-  // Callback to sync status filter from Gantt to main filters
-  const handleGanttStatusFilterChange = useCallback((newStatusFilters) => {
-    setFilters(prev => ({ ...prev, status: newStatusFilters }));
-  }, [setFilters]);
-
-  const ganttChartData = useMemo(() => {
-    const filteredVehiclesForGantt = vehicles.filter(vehicle => {
-      const matchesSearch = vehicle.license_plate.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           vehicle.brand_model.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesType = filters.type.length === 0 || filters.type.includes(vehicle.vehicle_type);
-      const matchesStatus = filters.status.length === 0 || filters.status.includes(vehicle.status);
-
-      const hasExpiring = checkExpiring(vehicle);
-      const matchesExpiring = filters.expiring.length === 0 ||
-                              (filters.expiring.includes("expiring") && hasExpiring) ||
-                              (filters.expiring.includes("not_expiring") && !hasExpiring);
-
-      return matchesSearch && matchesType && matchesStatus && matchesExpiring;
-    });
-
-    const filteredVehicleIds = new Set(filteredVehiclesForGantt.map(v => v.id));
-    const filteredAssignments = assignments.filter(a => a.vehicle_id && filteredVehicleIds.has(a.vehicle_id));
-
-    return { filteredVehicles: filteredVehiclesForGantt, filteredAssignments };
-  }, [vehicles, assignments, searchTerm, filters, checkExpiring]);
-
-  const filteredVehicles = useMemo(() => {
-    // This logic is the same as for the gantt chart, just with added sorting for the table.
-    // Ensure table filtering respects the main filters, not Gantt's specific status filters
-    const searchFiltered = vehicles.filter(v =>
-        v.license_plate.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.brand_model.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    const typeFiltered = searchFiltered.filter(v => {
-        const matchesType = filters.type.length === 0 || filters.type.includes(v.vehicle_type);
-        const matchesStatus = filters.status.length === 0 || filters.status.includes(v.status);
-        const hasExpiring = checkExpiring(v);
-        const matchesExpiring = filters.expiring.length === 0 ||
-                                (filters.expiring.includes("expiring") && hasExpiring) ||
-                                (filters.expiring.includes("not_expiring") && !hasExpiring);
-        return matchesType && matchesStatus && matchesExpiring;
-    });
-
-    return typeFiltered.sort((a, b) => {
-      // Assuming 'brand_model' is the sortable key.
-      // If sortConfig.key is different, this needs to be adapted.
-      const valA = a[sortConfig.key] || '';
-      const valB = b[sortConfig.key] || '';
-
-      if (typeof valA === 'string' && typeof valB === 'string') {
-        return sortConfig.direction === 'asc' 
-          ? valA.localeCompare(valB, 'cs', { sensitivity: 'base' })
-          : valB.localeCompare(valA, 'cs', { sensitivity: 'base' });
-      }
-      
-      // Fallback for non-string types or if key not found
-      return 0;
-    });
-  }, [vehicles, searchTerm, filters, sortConfig, checkExpiring]);
-
-
-  const isAdmin = isPrivileged(user);
-
-  const resetFilters = () => {
-    setSearchTerm("");
-    setFilters(defaultFilters);
-  };
-
-  const areFiltersActive = useMemo(() => {
-    return searchTerm !== "" ||
-           filters.type.length > 0 ||
-           filters.status.length > 0 ||
-           filters.expiring.length > 0;
-  }, [searchTerm, filters]);
+  }, [vehicles, searchTerm]);
 
   return (
-    <div className="p-4 md:p-8 bg-slate-50 min-h-screen">
+    <div className="p-4 md:p-6 bg-slate-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div className="flex items-center justify-between gap-4 mb-5">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">Vozidla</h1>
-            <p className="text-slate-600">Správa a evidence vozového parku</p>
+            <h1 className="text-xl md:text-2xl font-bold text-slate-900">Vozy</h1>
+            <p className="text-sm text-slate-600">Přehled všech vozidel napříč klienty.</p>
           </div>
-          {isAdmin && (
-            <Button onClick={() => openModal()} className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Přidat vozidlo
-            </Button>
-          )}
         </div>
 
-        {/* Gantt Chart */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
-              Vytížení vozidel
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <GanttChart
-              view="vehicles"
-              projects={projects}
-              workers={[]}
-              vehicles={ganttChartData.filteredVehicles}
-              assignments={ganttChartData.filteredAssignments}
-              isLoading={isLoading}
-              sortConfig={sortConfig}
-              setSortConfig={setSortConfig}
-              vehicleStatusFilters={filters.status}
-              setVehicleStatusFilters={handleGanttStatusFilterChange}
-              projectStatusFilters={ganttProjectStatusFilters}
-              setProjectStatusFilters={setGanttProjectStatusFilters}
-            />
-          </CardContent>
+        {error && (
+          <div role="alert" className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <Card className="mb-4">
+          <div className="p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="Hledat SPZ, značkou, modelem, VINem, klientem..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 min-h-[44px]"
+              />
+            </div>
+          </div>
         </Card>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-slate-700">Hledat</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Hledat vozidla..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+        {isLoading ? (
+          <div className="p-4 text-sm text-slate-500 text-center">Načítání...</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">Žádná vozidla nenalezena</div>
+        ) : (
+          <>
+            {/* Mobile: card list */}
+            <div className="md:hidden space-y-2">
+              {filtered.map((vehicle) => (
+                <div
+                  key={vehicle.id}
+                  onClick={() => navigate(`/vehicles/${vehicle.id}`)}
+                  className="bg-white rounded-xl border border-slate-200 p-4 cursor-pointer active:bg-slate-50"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Car className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <span className="font-semibold text-slate-900 truncate">
+                        {vehicle.brand || '?'} {vehicle.model || ''}
+                      </span>
+                    </div>
+                    <span className="font-mono text-sm text-slate-700 shrink-0">{vehicle.spz}</span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-3 flex-wrap">
+                    <TkBadge tkExpiry={vehicle.tk_expiry} />
+                    {vehicle.customer && (
+                      <span className="text-sm text-blue-600 flex items-center gap-1">
+                        <User className="w-3 h-3" />{vehicle.customer.name}
+                      </span>
+                    )}
+                    {[vehicle.year, vehicle.color].filter(Boolean).length > 0 && (
+                      <span className="text-xs text-slate-500">
+                        {[vehicle.year, vehicle.color].filter(Boolean).join(' / ')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-            <VehicleFilters
-              filters={filters}
-              onFilterChange={setFilters}
-              availableOptions={availableOptions}
-            />
-          </div>
-          {areFiltersActive && (
-            <div className="mt-4 flex justify-end">
-              <Button variant="ghost" onClick={resetFilters}>Zrušit filtry</Button>
-            </div>
-          )}
-        </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-          {isLoading ? (
-            <div className="text-center py-12">Načítání dat...</div>
-          ) : filteredVehicles.length === 0 ? (
-            <div className="col-span-full text-center py-12">
-              <Car className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-              <h3 className="text-lg font-medium text-slate-900 mb-2">Žádná vozidla nenalezena</h3>
-              <p className="text-slate-600 mb-4">Zkuste změnit filtry nebo přidejte nové vozidlo.</p>
-            </div>
-          ) : (
-            <VehiclesTable
-              vehicles={filteredVehicles}
-              onEdit={(vehicle) => openModal(vehicle, false)}
-              onDelete={handleDelete}
-              onViewDetail={(vehicle) => openModal(vehicle, true)}
-              isAdmin={isAdmin}
-              checkExpiring={checkExpiring}
-            />
-          )}
-        </div>
-
-        <Dialog open={showModal} onOpenChange={setShowModal}>
-          <DialogContent className="max-w-[95vw] sm:max-w-4xl mx-auto max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {isDetailView ? `Detail vozidla: ${selectedVehicle?.license_plate}` : (selectedVehicle ? "Upravit vozidlo" : "Nové vozidlo")}
-              </DialogTitle>
-            </DialogHeader>
-            <VehicleForm
-              vehicle={selectedVehicle}
-              assignments={assignments}
-              projects={projects}
-              isDetailView={isDetailView}
-              onSubmit={handleSubmit}
-              onCancel={closeModal}
-              isAdmin={isAdmin}
-            />
-          </DialogContent>
-        </Dialog>
-
-        {/* Confirm Delete Dialog */}
-        <ConfirmDialog
-          open={deleteConfirm.open}
-          onOpenChange={(open) => setDeleteConfirm({ open, vehicleId: null })}
-          title="Smazat vozidlo?"
-          description="Opravdu chcete smazat toto vozidlo? Tuto akci nelze vzít zpět."
-          onConfirm={confirmDelete}
-          confirmText="Smazat"
-          cancelText="Zrušit"
-          variant="destructive"
-        />
+            {/* Desktop: table */}
+            <Card className="hidden md:block">
+              <CardHeader>
+                <CardTitle>Seznam vozidel ({filtered.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b border-slate-200 bg-slate-50">
+                      <th className="py-3 pl-3 pr-2 font-medium">Vozidlo</th>
+                      <th className="py-3 px-2 font-medium">SPZ</th>
+                      <th className="py-3 px-2 font-medium">Rok / Barva</th>
+                      <th className="py-3 px-2 font-medium">STK</th>
+                      <th className="py-3 px-2 font-medium">Klient</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((vehicle) => (
+                      <tr
+                        key={vehicle.id}
+                        onClick={() => navigate(`/vehicles/${vehicle.id}`)}
+                        className="border-b border-slate-100 hover:bg-blue-50 transition-colors cursor-pointer"
+                      >
+                        <td className="py-3 pl-3 pr-2 font-medium text-slate-900">
+                          <div className="flex items-center gap-2">
+                            <Car className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                            {vehicle.brand || '?'} {vehicle.model || ''}
+                          </div>
+                        </td>
+                        <td className="py-3 px-2 font-mono text-slate-700">{vehicle.spz}</td>
+                        <td className="py-3 px-2 text-slate-600">
+                          {[vehicle.year, vehicle.color].filter(Boolean).join(' / ') || '–'}
+                        </td>
+                        <td className="py-3 px-2">
+                          <TkBadge tkExpiry={vehicle.tk_expiry} />
+                        </td>
+                        <td className="py-3 px-2">
+                          {vehicle.customer ? (
+                            <button
+                              className="flex items-center gap-1 text-blue-600 hover:underline"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/customers/${vehicle.customer.id}`); }}
+                            >
+                              <User className="w-3 h-3" />
+                              {vehicle.customer.name}
+                            </button>
+                          ) : (
+                            <span className="text-slate-400">–</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </div>
   );

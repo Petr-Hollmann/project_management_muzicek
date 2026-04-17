@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Task } from '@/entities/Task';
 import { User } from '@/entities/User';
-import { Project } from '@/entities/Project';
+// TODO: project assignment model migrated to orders/checklist, assignment currently as order_worker
 import { Assignment } from '@/entities/Assignment';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -74,20 +74,16 @@ export default function TasksWidget() {
 
   const loadData = useCallback(async () => {
     try {
-      const [user, allTasksData, allUsers, allProjects, allAssignments] = await Promise.all([
+      const [user, allTasksData, allUsers] = await Promise.all([
         User.me(),
-        Task.list('due_date'),
+        Task.list('created_at'),
         User.list(),
-        Project.list(),
-        Assignment.list(),
       ]);
       setCurrentUser(user);
       setUsers(allUsers);
-      setProjects(allProjects);
-      setAssignments(allAssignments);
       setUsersById(allUsers.reduce((acc, u) => ({ ...acc, [u.id]: u }), {}));
-      setProjectsById(allProjects.reduce((acc, p) => ({ ...acc, [p.id]: p }), {}));
-      const pending = allTasksData.filter(t => t.status === 'pending' || t.status === 'in_progress');
+      // checklist_item has is_completed field
+      const pending = allTasksData.filter(t => !t.is_completed);
       setAllTasks(pending);
     } catch (error) {
       console.error('Error loading tasks widget:', error);
@@ -133,14 +129,13 @@ export default function TasksWidget() {
   const handleComplete = async (task) => {
     try {
       await Task.update(task.id, {
-        status: 'completed',
-        completed_by_user_id: currentUser?.id || null,
+        is_completed: true,
         completed_at: new Date().toISOString(),
       });
-      toast({ title: 'Hotovo', description: 'Úkol byl splněn.' });
+      toast({ title: 'Hotovo', description: 'Položka checklistu byla splněna.' });
       loadData();
     } catch {
-      toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se aktualizovat úkol.' });
+      toast({ variant: 'destructive', title: 'Chyba', description: 'Nepodařilo se aktualizovat položku.' });
     }
   };
 
@@ -236,14 +231,13 @@ export default function TasksWidget() {
               <div className="space-y-3">
                 {pageTasks.map(task => {
                   const overdue = isOverdue(task);
-                  const assignee = task.assigned_to_user_id ? usersById[task.assigned_to_user_id] : null;
-                  const project = task.project_id ? projectsById[task.project_id] : null;
+                  const assignee = task.assigned_to ? usersById[task.assigned_to] : null;
 
                   return (
                     <div key={task.id} className="p-3 border rounded-lg hover:bg-slate-50 transition-colors">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium text-slate-900 text-sm">{task.title}</p>
+                          <p className="font-medium text-slate-900 text-sm">{task.title || task.name}</p>
                           {task.description && (
                             <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{task.description}</p>
                           )}
@@ -269,28 +263,17 @@ export default function TasksWidget() {
                         {assignee && (
                           <span className="text-xs text-slate-500">{assignee.full_name || assignee.email}</span>
                         )}
-                        {project && (
-                          <button
-                            onClick={() => navigate(`${createPageUrl('ProjectDetail')}?id=${project.id}`)}
-                            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                          >
-                            <FolderOpen className="w-3 h-3" />
-                            {project.name}
-                          </button>
+                        {task.assigned_to && (
+                          <span className="text-xs text-slate-500">#{task.assigned_to}</span>
                         )}
-                        {task.due_date && (
-                          <span className={`flex items-center gap-1 text-xs font-medium ${overdue ? 'text-red-600' : 'text-slate-500'}`}>
-                            <Calendar className="w-3 h-3" />
-                            {overdue ? 'Po termínu: ' : 'Do: '}
-                            {format(new Date(task.due_date), 'd. M. yyyy', { locale: cs })}
-                          </span>
+                        {task.created_at && (
+                          <span className="text-xs text-slate-500">{format(new Date(task.created_at), 'd.M.yyyy', { locale: cs })}</span>
                         )}
-                        <Badge className={`text-xs px-1.5 py-0 ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium}`}>
-                          {PRIORITY_LABELS[task.priority] || task.priority}
-                        </Badge>
-                        <Badge className={`text-xs px-1.5 py-0 ${STATUS_COLORS[task.status] || STATUS_COLORS.pending}`}>
-                          {STATUS_LABELS[task.status] || task.status}
-                        </Badge>
+                        {task.is_completed ? (
+                          <Badge className="text-xs px-1.5 py-0 bg-green-100 text-green-700">Dokončeno</Badge>
+                        ) : (
+                          <Badge className="text-xs px-1.5 py-0 bg-yellow-100 text-yellow-700">Otevřeno</Badge>
+                        )}
                       </div>
                     </div>
                   );
